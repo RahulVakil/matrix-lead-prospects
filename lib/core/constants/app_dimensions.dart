@@ -36,6 +36,13 @@ class AppDimensions {
   static const double cardPadding = 16;
   static const double cardRadius = 10; // compass_v2 uses 8.67, rounded up
 
+  // Compass-aligned component sizing
+  static const double bottomSheetRadius = 27;
+  static const double buttonHeight = 50;
+  static const double buttonRadius = 28;
+  static const double inputMinHeight = 60;
+  static const double inputRadius = 10;
+
   // Responsive breakpoints
   static const double breakpointMobile = 0;
   static const double breakpointMobileLarge = 400;

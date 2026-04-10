@@ -25,7 +25,7 @@ class AppDecorations {
 
   static BoxDecoration get bottomSheet => const BoxDecoration(
         color: AppColors.surfacePrimary,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
         boxShadow: [
           BoxShadow(
             color: Color(0x1F000000),

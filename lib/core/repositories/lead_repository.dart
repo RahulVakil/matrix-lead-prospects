@@ -1,0 +1,80 @@
+import '../models/lead_model.dart';
+import '../models/coverage_check_result.dart';
+import '../models/next_action_model.dart';
+import '../models/paginated_result.dart';
+import '../models/timeline_entry_model.dart';
+import '../enums/lead_stage.dart';
+import '../enums/lead_temperature.dart';
+import '../enums/lead_source.dart';
+import '../enums/loss_reason.dart';
+import '../enums/update_type.dart';
+
+abstract class LeadRepository {
+  Future<PaginatedResult<LeadModel>> getLeads({
+    int page = 1,
+    int pageSize = 20,
+    LeadStage? stage,
+    LeadTemperature? temperature,
+    LeadSource? source,
+    String? searchQuery,
+    String? sortBy,
+    bool ascending = false,
+    String? assignedRmId,
+  });
+
+  Future<LeadModel> getLeadById(String id);
+
+  Future<LeadModel> createLead(LeadModel lead);
+
+  Future<LeadModel> updateLead(LeadModel lead);
+
+  Future<LeadModel> updateLeadStage(
+    String id,
+    LeadStage newStage, {
+    String? reason,
+    String? notes,
+  });
+
+  Future<LeadModel> markLost(
+    String id,
+    LossReason reason, {
+    String? notes,
+    DateTime? reopenDate,
+  });
+
+  Future<LeadModel> parkLead(
+    String id,
+    ParkReason reason,
+    DateTime followUpDate, {
+    String? notes,
+  });
+
+  Future<CoverageCheckResult> checkCoverage(String phone, {String? pan});
+
+  Future<List<LeadModel>> getHotLeads(String rmId);
+
+  Future<List<LeadModel>> getFollowUpsDueToday(String rmId);
+
+  Future<List<LeadModel>> getNewAssignments(String rmId);
+
+  Future<Map<LeadStage, int>> getPipelineSummary(String rmId);
+
+  /// Set or clear the "next action" attached to a lead. Pass null to clear.
+  Future<LeadModel> setNextAction(String leadId, NextActionModel? action);
+
+  /// Append a Quick Update entry on a lead and update its latest status.
+  Future<LeadModel> addStatusUpdate(
+    String leadId, {
+    required LeadUpdateStatus status,
+    String? notes,
+    required String authorId,
+    required String authorName,
+  });
+
+  /// Build the merged timeline (activities + status updates + stage changes
+  /// + deal edits + IB events) for a lead, sorted newest first.
+  Future<List<TimelineEntryModel>> getTimeline(String leadId);
+
+  /// Append an arbitrary timeline entry — used by IB lead created, deal edits, etc.
+  Future<void> appendTimelineEntry(TimelineEntryModel entry);
+}
