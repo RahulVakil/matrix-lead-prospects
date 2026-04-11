@@ -4,8 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/enums/user_role.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../cubit/shell_cubit.dart';
 
+/// More tab — deliberately minimal.
+/// Single Leads entry → Leads landing hub. Switch role + logout.
+/// All other lead-related screens are accessed FROM the Leads hub.
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
@@ -13,207 +19,303 @@ class MoreScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthCubit>().state.currentUser;
 
-    return ListView(
-      children: [
-        const SizedBox(height: 8),
-
-        // Lead management section
-        _sectionHeader('LEAD MANAGEMENT'),
-        _menuItem(
-          context,
-          icon: Icons.people_outline,
-          title: 'Leads & Prospects',
-          subtitle: 'View and manage your lead pipeline',
-          onTap: () => context.push('/leads'),
-        ),
-        _menuItem(
-          context,
-          icon: Icons.shield_outlined,
-          title: 'Coverage Check',
-          subtitle: 'Check if a person/company is already covered',
-          onTap: () => context.push('/coverage'),
-        ),
-        _menuItem(
-          context,
-          icon: Icons.business_center,
-          title: 'Capture IB Lead',
-          subtitle: 'Log an Investment Banking opportunity',
-          onTap: () => context.push('/ib-leads/new'),
-        ),
-        if (user?.role == UserRole.branchManager || user?.role == UserRole.admin)
-          _menuItem(
-            context,
-            icon: Icons.fact_check_outlined,
-            title: 'IB Lead Approvals',
-            subtitle: 'Review IB leads pending Branch Head approval',
-            onTap: () => context.push('/ib-leads'),
-          ),
-        _menuItem(
-          context,
-          icon: Icons.notifications_none,
-          title: 'Notifications',
-          subtitle: 'Inbox of recent updates',
-          onTap: () => context.push('/notifications'),
-        ),
-        _menuItem(
-          context,
-          icon: Icons.search,
-          title: 'Search Leads',
-          subtitle: 'Find leads by name, phone, or company',
-          onTap: () => context.push('/leads/search'),
-        ),
-
-        // Profiling section (visible to RM + Checker)
-        if (user?.role == UserRole.rm || user?.role == UserRole.checker || user?.role == UserRole.admin) ...[
-          _sectionHeader('PROFILING'),
-          if (user?.role == UserRole.checker || user?.role == UserRole.admin)
-            _menuItem(
-              context,
-              icon: Icons.verified_user,
-              title: 'Checker Queue',
-              subtitle: 'Review pending profiling submissions',
-              badge: '8',
-              onTap: () => context.push('/profiling/queue'),
-            ),
-        ],
-
-        // Admin section
-        if (user?.role == UserRole.admin || user?.role == UserRole.teamLead) ...[
-          _sectionHeader('ADMINISTRATION'),
-          if (user?.role == UserRole.admin)
-            _menuItem(
-              context,
-              icon: Icons.assignment_ind,
-              title: 'Lead Assignment',
-              subtitle: 'Assign unassigned leads to RMs',
-              onTap: () => context.push('/admin/leads'),
-            ),
-          _menuItem(
-            context,
-            icon: Icons.pool,
-            title: 'Lead Pool',
-            subtitle: 'Manage on-demand lead pool',
-            onTap: () => context.push('/admin/pool'),
-          ),
-          if (user?.role == UserRole.teamLead || user?.role == UserRole.admin)
-            _menuItem(
-              context,
-              icon: Icons.dashboard,
-              title: 'TL Lead Dashboard',
-              subtitle: 'Team lead pipeline overview',
-              onTap: () => context.push('/tl/dashboard'),
-            ),
-          _menuItem(
-            context,
-            icon: Icons.history,
-            title: 'Lead Request Log',
-            subtitle: 'View lead request history',
-            onTap: () => context.push('/tl/requests'),
-          ),
-        ],
-
-        // RM section — request leads
-        if (user?.role == UserRole.rm) ...[
-          _sectionHeader('REQUESTS'),
-          _menuItem(
-            context,
-            icon: Icons.add_circle_outline,
-            title: 'Request Leads',
-            subtitle: 'Request additional leads from pool',
-            onTap: () => context.push('/leads/request'),
-          ),
-        ],
-
-        _sectionHeader('ACCOUNT'),
-        _menuItem(
-          context,
-          icon: Icons.swap_horiz,
-          title: 'Switch Role',
-          subtitle: 'Demo: switch between RM, TL, Checker, Admin',
-          onTap: () => _showRoleSwitcher(context),
-        ),
-        _menuItem(
-          context,
-          icon: Icons.logout,
-          title: 'Logout',
-          subtitle: 'Sign out of Matrix',
-          iconColor: AppColors.errorRed,
-          onTap: () => context.read<AuthCubit>().logout(),
-        ),
-        const SizedBox(height: 80),
-      ],
-    );
-  }
-
-  Widget _sectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-      child: Text(title, style: AppTextStyles.labelSmall.copyWith(letterSpacing: 1, color: AppColors.textSecondary)),
-    );
-  }
-
-  Widget _menuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    Color? iconColor,
-    String? badge,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: iconColor ?? AppColors.navyPrimary, size: 24),
-      title: Text(title, style: AppTextStyles.labelLarge),
-      subtitle: Text(subtitle, style: AppTextStyles.caption),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    return HeroScaffold(
+      header: HeroAppBar.simple(title: 'More', showBack: false),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 32),
         children: [
-          if (badge != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.hotRed,
-                borderRadius: BorderRadius.circular(10),
+          if (user != null) _ProfileCard(name: user.name, role: user.role),
+          const SizedBox(height: 22),
+
+          _MoreCard(
+            children: [
+              _MoreRow(
+                icon: Icons.people_alt_outlined,
+                accent: AppColors.navyPrimary,
+                title: 'Leads',
+                trailing: 'Open',
+                onTap: () => context.read<ShellCubit>().updateIndex(0),
               ),
-              child: Text(badge, style: AppTextStyles.caption.copyWith(color: AppColors.textOnDark, fontWeight: FontWeight.w600)),
-            ),
-          const SizedBox(width: 4),
-          const Icon(Icons.chevron_right, color: AppColors.textHint, size: 20),
+              _MoreRow(
+                icon: Icons.notifications_outlined,
+                accent: AppColors.warmAmber,
+                title: 'Notifications',
+                onTap: () => context.push('/notifications'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+
+          _MoreCard(
+            children: [
+              _MoreRow(
+                icon: Icons.swap_horiz,
+                accent: AppColors.tealAccent,
+                title: 'Switch role',
+                trailing: 'Demo',
+                onTap: () => _showRoleSwitcher(context),
+              ),
+              _MoreRow(
+                icon: Icons.logout,
+                accent: AppColors.errorRed,
+                title: 'Sign out',
+                onTap: () => context.read<AuthCubit>().logout(),
+              ),
+            ],
+          ),
         ],
       ),
-      onTap: onTap,
     );
   }
 
   void _showRoleSwitcher(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Switch Role', style: AppTextStyles.heading3),
-            const SizedBox(height: 16),
-            ...UserRole.values.where((r) => [UserRole.rm, UserRole.teamLead, UserRole.branchManager, UserRole.checker, UserRole.admin].contains(r)).map(
-              (role) => ListTile(
-                leading: Icon(
-                  role == UserRole.rm ? Icons.person :
-                  role == UserRole.teamLead ? Icons.group :
-                  role == UserRole.branchManager ? Icons.fact_check :
-                  role == UserRole.checker ? Icons.verified_user : Icons.admin_panel_settings,
-                  color: AppColors.navyPrimary,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderDefault,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-                title: Text(role.label),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.read<AuthCubit>().login(role);
-                },
+                const SizedBox(height: 16),
+                Text(
+                  'Switch role',
+                  style: AppTextStyles.heading3.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Demo only — see how the app changes per role.',
+                  style: AppTextStyles.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                ...[
+                  UserRole.rm,
+                  UserRole.teamLead,
+                  UserRole.branchManager,
+                  UserRole.checker,
+                  UserRole.admin,
+                ].map(
+                  (role) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.navyPrimary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        switch (role) {
+                          UserRole.rm => Icons.person_outline,
+                          UserRole.teamLead => Icons.groups_outlined,
+                          UserRole.branchManager => Icons.fact_check_outlined,
+                          UserRole.checker => Icons.verified_user_outlined,
+                          UserRole.admin => Icons.admin_panel_settings_outlined,
+                          _ => Icons.person_outline,
+                        },
+                        color: AppColors.navyPrimary,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      role.label,
+                      style: AppTextStyles.bodyLarge.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.read<AuthCubit>().login(role);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileCard extends StatelessWidget {
+  final String name;
+  final UserRole role;
+  const _ProfileCard({required this.name, required this.role});
+
+  String get _initials {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFFDBEAFE),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                _initials,
+                style: AppTextStyles.heading3.copyWith(
+                  color: AppColors.navyPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ],
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  style: AppTextStyles.heading3.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  role.label,
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoreCard extends StatelessWidget {
+  final List<Widget> children;
+  const _MoreCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        children: List.generate(children.length, (i) {
+          final isLast = i == children.length - 1;
+          return Column(
+            children: [
+              children[i],
+              if (!isLast)
+                Padding(
+                  padding: const EdgeInsets.only(left: 68),
+                  child: Container(
+                    height: 1,
+                    color: AppColors.borderDefault.withValues(alpha: 0.4),
+                  ),
+                ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _MoreRow extends StatelessWidget {
+  final IconData icon;
+  final Color accent;
+  final String title;
+  final String? trailing;
+  final VoidCallback onTap;
+
+  const _MoreRow({
+    required this.icon,
+    required this.accent,
+    required this.title,
+    this.trailing,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTextStyles.bodyLarge.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (trailing != null) ...[
+                Text(
+                  trailing!,
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+                ),
+                const SizedBox(width: 6),
+              ],
+              const Icon(Icons.chevron_right, color: AppColors.textHint, size: 18),
+            ],
+          ),
         ),
       ),
     );

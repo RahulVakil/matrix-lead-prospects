@@ -14,10 +14,12 @@ import 'mock_data_generators.dart';
 
 class MockLeadRepository implements LeadRepository {
   late final List<LeadModel> _leads;
+  late final List<LeadModel> _pool;
   final Map<String, List<TimelineEntryModel>> _extraTimeline = {};
 
   MockLeadRepository() {
     _leads = MockDataGenerators.generateLeads(150);
+    _pool = MockDataGenerators.generatePoolLeads(15);
   }
 
   @override
@@ -259,6 +261,109 @@ class MockLeadRepository implements LeadRepository {
     if (idx >= 0) {
       _leads[idx] = _leads[idx].copyWith(updatedAt: DateTime.now());
     }
+  }
+
+  // ── Pool / Get Lead ─────────────────────────────────────────────────
+
+  bool _matchesPoolFilters(
+    LeadModel lead, {
+    String? vertical,
+    String? aumBand,
+    String? source,
+  }) {
+    if (vertical != null && vertical.isNotEmpty && lead.vertical != vertical) {
+      return false;
+    }
+    if (source != null && source.isNotEmpty && lead.source.label != source) {
+      return false;
+    }
+    if (aumBand != null && aumBand.isNotEmpty) {
+      final aum = lead.estimatedAum ?? 0;
+      switch (aumBand) {
+        case '<10L':
+          if (aum >= 1000000) return false;
+          break;
+        case '10-50L':
+          if (aum < 1000000 || aum >= 5000000) return false;
+          break;
+        case '50L-1Cr':
+          if (aum < 5000000 || aum >= 10000000) return false;
+          break;
+        case '1Cr+':
+          if (aum < 10000000) return false;
+          break;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Future<int> getPoolCount({
+    String? vertical,
+    String? aumBand,
+    String? source,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    return _pool
+        .where((l) => _matchesPoolFilters(
+              l,
+              vertical: vertical,
+              aumBand: aumBand,
+              source: source,
+            ))
+        .length;
+  }
+
+  @override
+  Future<Map<String, int>> getPoolBreakdown() async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    final map = <String, int>{};
+    for (final lead in _pool) {
+      map[lead.vertical] = (map[lead.vertical] ?? 0) + 1;
+      final src = lead.source.label;
+      map['SRC:$src'] = (map['SRC:$src'] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  @override
+  Future<LeadModel?> peekNextFromPool({
+    String? vertical,
+    String? aumBand,
+    String? source,
+    Set<String> excludeIds = const {},
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    for (final lead in _pool) {
+      if (excludeIds.contains(lead.id)) continue;
+      if (_matchesPoolFilters(
+        lead,
+        vertical: vertical,
+        aumBand: aumBand,
+        source: source,
+      )) {
+        return lead;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<LeadModel> claimFromPool(
+    String leadId,
+    String rmId,
+    String rmName,
+  ) async {
+    await Future.delayed(const Duration(milliseconds: 350));
+    final idx = _pool.indexWhere((l) => l.id == leadId);
+    if (idx < 0) throw StateError('Lead not in pool: $leadId');
+    final claimed = _pool.removeAt(idx).copyWith(
+          assignedRmId: rmId,
+          assignedRmName: rmName,
+          updatedAt: DateTime.now(),
+        );
+    _leads.insert(0, claimed);
+    return claimed;
   }
 
   @override

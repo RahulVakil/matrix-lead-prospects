@@ -77,4 +77,26 @@ abstract class LeadRepository {
 
   /// Append an arbitrary timeline entry — used by IB lead created, deal edits, etc.
   Future<void> appendTimelineEntry(TimelineEntryModel entry);
+
+  // ── Pool / Get Lead workflow ────────────────────────────────────────
+
+  /// Total leads sitting in the shared pool, optionally filtered.
+  Future<int> getPoolCount({String? vertical, String? aumBand, String? source});
+
+  /// Pool composition by vertical, source, AUM band.
+  Future<Map<String, int>> getPoolBreakdown();
+
+  /// Returns the next pool lead matching the given filters without claiming
+  /// it. [excludeIds] lets the RM "skip" a lead and ask for the next one.
+  Future<LeadModel?> peekNextFromPool({
+    String? vertical,
+    String? aumBand,
+    String? source,
+    Set<String> excludeIds = const {},
+  });
+
+  /// Removes the lead from the pool and assigns it to the requesting RM.
+  /// Returns the updated [LeadModel] (now with the RM as owner) which is also
+  /// inserted into the main `_leads` list so it appears in pipeline.
+  Future<LeadModel> claimFromPool(String leadId, String rmId, String rmName);
 }

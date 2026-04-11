@@ -33,7 +33,9 @@ class AppColors {
   static const Color surfacePrimary = Color(0xFFFFFFFF);
   static const Color surfaceSecondary = Color(0xFFF5F5F5);
   static const Color surfaceTertiary = Color(0xFFF4F6FB);
+  static const Color surfaceContent = Color(0xFFE8EDF3); // hero scaffold sheet bg (compass exact)
   static const Color cardBackground = Color(0xFFF5F5F5);
+  static const Color heroBackdrop = Color(0xFF0F1E4A);   // alias of navyDark for clarity
 
   // Borders — matches compass_v2_mobile
   static const Color borderDefault = Color(0xFFD2D5DF);

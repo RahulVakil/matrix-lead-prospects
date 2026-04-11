@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/repositories/coverage_repository.dart';
 import '../../../core/repositories/ib_lead_repository.dart';
 import '../../../core/services/notification_service.dart';
 import 'ib_lead_form_notifier.dart';
@@ -39,6 +40,7 @@ final ibLeadFormProvider = StateNotifierProvider.autoDispose
   return IbLeadFormNotifier(
     repository: getIt<IbLeadRepository>(),
     notifications: getIt<NotificationService>(),
+    coverage: getIt<CoverageRepository>(),
     createdById: seed.createdById,
     createdByName: seed.createdByName,
     initialClientName: seed.clientName,

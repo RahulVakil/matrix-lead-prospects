@@ -10,9 +10,9 @@ class RouteNames {
 
   // Lead routes
   static const String leads = '/leads';
+  static const String getLead = '/get-lead';
   static const String leadDetail = '/leads/:leadId';
   static const String createLead = '/leads/new';
-  static const String leadSearch = '/leads/search';
 
   // Profiling routes
   static const String profilingStart = '/profiling/:leadId/start';

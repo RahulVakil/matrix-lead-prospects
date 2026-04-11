@@ -3,6 +3,7 @@ import '../../../core/enums/ib_deal_type.dart';
 import '../../../core/models/ib_lead_model.dart';
 import '../../../core/models/key_contact_model.dart';
 import '../../../core/models/notification_model.dart';
+import '../../../core/repositories/coverage_repository.dart';
 import '../../../core/repositories/ib_lead_repository.dart';
 import '../../../core/services/notification_service.dart';
 import 'ib_lead_form_state.dart';
@@ -10,12 +11,14 @@ import 'ib_lead_form_state.dart';
 class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
   final IbLeadRepository _repository;
   final NotificationService _notifications;
+  final CoverageRepository _coverage;
   final String createdById;
   final String createdByName;
 
   IbLeadFormNotifier({
     required IbLeadRepository repository,
     required NotificationService notifications,
+    required CoverageRepository coverage,
     required this.createdById,
     required this.createdByName,
     String? initialClientName,
@@ -23,14 +26,36 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
     String? initialCompanyName,
   })  : _repository = repository,
         _notifications = notifications,
+        _coverage = coverage,
         super(IbLeadFormState(
           clientName: initialClientName,
           clientCode: initialClientCode,
           companyName: initialCompanyName ?? '',
         ));
 
-  void setClientName(String v) => state = state.copyWith(clientName: v);
-  void setCompanyName(String v) => state = state.copyWith(companyName: v);
+  /// Optional, non-blocking coverage check.
+  /// Result is shown inline in the IB form. RM can submit regardless.
+  Future<void> runCoverageCheck() async {
+    final company = state.companyName.trim();
+    final name = state.clientName?.trim();
+    if (company.isEmpty && (name == null || name.isEmpty)) return;
+    state = state.copyWith(isCheckingCoverage: true);
+    final result = await _coverage.checkCoverage(
+      name: name?.isEmpty ?? true ? null : name,
+      company: company.isEmpty ? null : company,
+    );
+    state = state.copyWith(
+      isCheckingCoverage: false,
+      lastCoverageResult: result,
+    );
+  }
+
+  void clearCoverage() => state = state.copyWith(clearCoverage: true);
+
+  void setClientName(String v) =>
+      state = state.copyWith(clientName: v, clearCoverage: true);
+  void setCompanyName(String v) =>
+      state = state.copyWith(companyName: v, clearCoverage: true);
   void setContacts(List<KeyContactModel> v) => state = state.copyWith(contacts: v);
 
   void setDealType(IbDealType? v) => state = state.copyWith(dealType: v);

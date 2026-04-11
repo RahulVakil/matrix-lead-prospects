@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../core/enums/ib_deal_type.dart';
+import '../../../core/models/coverage_check_result.dart';
 import '../../../core/models/key_contact_model.dart';
 
 class IbLeadFormState extends Equatable {
@@ -22,6 +23,11 @@ class IbLeadFormState extends Equatable {
   final bool isSubmitting;
   final String? submitError;
 
+  /// Coverage check is OPTIONAL in IB and never blocks submit. Result is shown
+  /// inline below the company name field as informational only.
+  final bool isCheckingCoverage;
+  final CoverageCheckResult? lastCoverageResult;
+
   const IbLeadFormState({
     this.clientName,
     this.clientCode,
@@ -40,6 +46,8 @@ class IbLeadFormState extends Equatable {
     this.declarationAccepted = false,
     this.isSubmitting = false,
     this.submitError,
+    this.isCheckingCoverage = false,
+    this.lastCoverageResult,
   });
 
   bool get isReadyToSubmit {
@@ -74,6 +82,9 @@ class IbLeadFormState extends Equatable {
     bool? declarationAccepted,
     bool? isSubmitting,
     String? submitError,
+    bool? isCheckingCoverage,
+    CoverageCheckResult? lastCoverageResult,
+    bool clearCoverage = false,
   }) {
     return IbLeadFormState(
       clientName: clientName ?? this.clientName,
@@ -94,6 +105,9 @@ class IbLeadFormState extends Equatable {
       declarationAccepted: declarationAccepted ?? this.declarationAccepted,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       submitError: submitError,
+      isCheckingCoverage: isCheckingCoverage ?? this.isCheckingCoverage,
+      lastCoverageResult:
+          clearCoverage ? null : (lastCoverageResult ?? this.lastCoverageResult),
     );
   }
 
@@ -116,5 +130,7 @@ class IbLeadFormState extends Equatable {
         declarationAccepted,
         isSubmitting,
         submitError,
+        isCheckingCoverage,
+        lastCoverageResult?.status,
       ];
 }

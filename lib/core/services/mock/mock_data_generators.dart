@@ -226,6 +226,46 @@ class MockDataGenerators {
     return out;
   }
 
+  /// Generates a small "shared pool" of unassigned leads.
+  /// Used by the Get Lead workflow — the RM can claim from this pool.
+  /// Each lead has assignedRmId/Name set to placeholder POOL values so the
+  /// list filtering still works; claimFromPool overwrites them.
+  static List<LeadModel> generatePoolLeads(int count) {
+    final rng = Random(99);
+    final now = DateTime.now();
+    final out = <LeadModel>[];
+    for (var i = 0; i < count; i++) {
+      final firstName = _firstNames[(i * 4 + 7) % _firstNames.length];
+      final lastName = _lastNames[(i * 5 + 2) % _lastNames.length];
+      final source = LeadSource.values[(i * 3) % LeadSource.values.length];
+      final aum = _aumForIndex(i + 5, rng);
+      final daysOld = rng.nextInt(20) + 1;
+      final createdAt = now.subtract(Duration(days: daysOld));
+      out.add(LeadModel(
+        id: 'POOL${(i + 1).toString().padLeft(4, '0')}',
+        fullName: '$firstName $lastName',
+        phone: '+91 ${9100000000 + i * 9876}',
+        email: rng.nextBool()
+            ? '${firstName.toLowerCase()}.${lastName.toLowerCase()}@email.com'
+            : null,
+        companyName: _companies[(i * 2 + 1) % _companies.length],
+        city: _cities[(i * 3) % _cities.length],
+        source: source,
+        stage: LeadStage.lead,
+        score: source.baseScore + rng.nextInt(20),
+        estimatedAum: aum,
+        productInterest: [_products[i % _products.length]],
+        assignedRmId: 'POOL',
+        assignedRmName: 'Shared Pool',
+        vertical: i % 2 == 0 ? 'EWG' : 'PWG',
+        createdAt: createdAt,
+        updatedAt: createdAt,
+        recentActivities: const [],
+      ));
+    }
+    return out;
+  }
+
   static List<ClientModel> generateClients(int count) {
     final rng = Random(11);
     final now = DateTime.now();

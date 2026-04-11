@@ -6,11 +6,10 @@ import '../features/shell/presentation/pages/app_shell.dart';
 import '../features/lead_inbox/presentation/pages/lead_inbox_screen.dart';
 import '../features/lead_detail/presentation/pages/lead_detail_screen.dart';
 import '../features/create_lead/presentation/pages/create_lead_screen.dart';
-import '../features/search/presentation/pages/lead_search_screen.dart';
+import '../features/get_lead/presentation/pages/get_lead_screen.dart';
 import '../features/profiling/presentation/pages/profiling_start_screen.dart';
 import '../features/profiling/presentation/pages/checker_queue_screen.dart';
 import '../features/admin/presentation/pages/assignment_screen.dart';
-import '../features/admin/presentation/pages/request_leads_screen.dart';
 import '../features/admin/presentation/pages/pool_management_screen.dart';
 import '../features/admin/presentation/pages/request_log_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
@@ -52,12 +51,8 @@ GoRouter createRouter(AuthCubit authCubit) {
         pageBuilder: (context, state) => _fadePage(const CreateLeadScreen()),
       ),
       GoRoute(
-        path: '/leads/search',
-        pageBuilder: (context, state) => _fadePage(const LeadSearchScreen()),
-      ),
-      GoRoute(
-        path: '/leads/request',
-        pageBuilder: (context, state) => _fadePage(const RequestLeadsScreen()),
+        path: '/get-lead',
+        pageBuilder: (context, state) => _fadePage(const GetLeadScreen()),
       ),
       GoRoute(
         path: '/leads/:leadId',

@@ -3,18 +3,21 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/enums/ib_deal_type.dart';
+import '../../../../core/models/coverage_check_result.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/compass_app_bar.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_dropdown.dart';
 import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../core/widgets/inr_currency_field.dart';
 import '../../../../core/widgets/key_contacts_field.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../coverage/presentation/widgets/coverage_result_sheet.dart';
 import '../../notifier/providers.dart';
 
 /// IB Lead Capture form. Single scrollable screen, Riverpod-driven.
@@ -56,14 +59,60 @@ class _CaptureBody extends ConsumerWidget {
     final state = ref.watch(ibLeadFormProvider(seed));
     final notifier = ref.read(ibLeadFormProvider(seed).notifier);
 
-    return Scaffold(
-      backgroundColor: AppColors.surfaceTertiary,
-      appBar: const CompassAppBar(
-        title: 'Capture IB Lead',
+    return HeroScaffold(
+      header: HeroAppBar.simple(
+        title: 'New IB lead',
         subtitle: 'Goes to Branch Head for review',
       ),
+      bottomBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: CompassButton.secondary(
+                  label: 'Save Draft',
+                  onPressed: state.isSubmitting
+                      ? null
+                      : () async {
+                          final saved = await notifier.saveDraft();
+                          if (saved != null && context.mounted) {
+                            showCompassSnack(
+                              context,
+                              message: 'Draft saved',
+                              type: CompassSnackType.success,
+                            );
+                            context.pop();
+                          }
+                        },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: CompassButton(
+                  label: 'Submit',
+                  isLoading: state.isSubmitting,
+                  onPressed: state.isReadyToSubmit
+                      ? () async {
+                          final saved = await notifier.submit();
+                          if (saved != null && context.mounted) {
+                            showCompassSnack(
+                              context,
+                              message: 'Sent to Branch Head for review',
+                              type: CompassSnackType.success,
+                            );
+                            context.pop();
+                          }
+                        }
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           const CompassSectionHeader(title: 'Client & Company'),
           const SizedBox(height: 12),
@@ -89,6 +138,14 @@ class _CaptureBody extends ConsumerWidget {
             initialValue: state.companyName,
             hint: 'e.g. Mehta Industries Pvt Ltd',
             onChanged: notifier.setCompanyName,
+          ),
+          const SizedBox(height: 10),
+          _IbCoverageRow(
+            checking: state.isCheckingCoverage,
+            result: state.lastCoverageResult,
+            canRun: state.companyName.trim().isNotEmpty ||
+                (state.clientName?.trim().isNotEmpty ?? false),
+            onRun: notifier.runCoverageCheck,
           ),
           const SizedBox(height: 16),
           KeyContactsField(
@@ -250,52 +307,163 @@ class _CaptureBody extends ConsumerWidget {
           ],
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: CompassButton.secondary(
-                  label: 'Save Draft',
-                  onPressed: state.isSubmitting
-                      ? null
-                      : () async {
-                          final saved = await notifier.saveDraft();
-                          if (saved != null && context.mounted) {
-                            showCompassSnack(
-                              context,
-                              message: 'Draft saved',
-                              type: CompassSnackType.success,
-                            );
-                            context.pop();
-                          }
-                        },
-                ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Inline coverage check row for IB — optional to run, never blocks submit
+// ────────────────────────────────────────────────────────────────────
+
+class _IbCoverageRow extends StatelessWidget {
+  final bool checking;
+  final CoverageCheckResult? result;
+  final bool canRun;
+  final Future<void> Function() onRun;
+
+  const _IbCoverageRow({
+    required this.checking,
+    required this.result,
+    required this.canRun,
+    required this.onRun,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (checking) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppColors.textHint,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: CompassButton(
-                  label: 'Submit',
-                  isLoading: state.isSubmitting,
-                  onPressed: state.isReadyToSubmit
-                      ? () async {
-                          final saved = await notifier.submit();
-                          if (saved != null && context.mounted) {
-                            showCompassSnack(
-                              context,
-                              message: 'Sent to Branch Head for review',
-                              type: CompassSnackType.success,
-                            );
-                            context.pop();
-                          }
-                        }
-                      : null,
-                ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Checking coverage…',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (result == null) {
+      // No result yet → show the trigger button
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: GestureDetector(
+          onTap: canRun ? () => onRun() : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: canRun
+                  ? AppColors.navyPrimary.withValues(alpha: 0.08)
+                  : AppColors.surfaceTertiary,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: canRun
+                    ? AppColors.navyPrimary.withValues(alpha: 0.3)
+                    : AppColors.borderDefault,
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  size: 14,
+                  color: canRun ? AppColors.navyPrimary : AppColors.textHint,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Check coverage (optional)',
+                  style: AppTextStyles.caption.copyWith(
+                    color: canRun ? AppColors.navyPrimary : AppColors.textHint,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      );
+    }
+
+    // Result loaded → show inline status pill with link to read-only sheet
+    final color = switch (result!.status) {
+      CoverageStatus.clear => AppColors.successGreen,
+      CoverageStatus.existingClient => AppColors.errorRed,
+      CoverageStatus.duplicateLead => AppColors.warmAmber,
+      CoverageStatus.requiresReview => AppColors.tealAccent,
+      CoverageStatus.dnd => AppColors.errorRed,
+    };
+    final icon = switch (result!.status) {
+      CoverageStatus.clear => Icons.check_circle_outline,
+      CoverageStatus.existingClient => Icons.shield,
+      CoverageStatus.duplicateLead => Icons.warning_amber_rounded,
+      CoverageStatus.requiresReview => Icons.search,
+      CoverageStatus.dnd => Icons.do_not_disturb_on_outlined,
+    };
+    final label = switch (result!.status) {
+      CoverageStatus.clear => 'No existing coverage',
+      CoverageStatus.existingClient =>
+        'Already a client of ${result!.existingRmName ?? "another RM"}',
+      CoverageStatus.duplicateLead =>
+        'Duplicate lead with ${result!.existingRmName ?? "another RM"}',
+      CoverageStatus.requiresReview =>
+        '${result!.alternateMatches.length} possible matches',
+      CoverageStatus.dnd => 'Do not disturb',
+    };
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (result!.status != CoverageStatus.clear)
+            TextButton(
+              onPressed: () => showCoverageResultSheet(
+                context,
+                result!,
+                readOnly: true,
+              ),
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: color,
+              ),
+              child: const Text('Details'),
+            ),
+          IconButton(
+            tooltip: 'Re-run',
+            icon: Icon(Icons.refresh, size: 16, color: color),
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(4),
+            onPressed: () => onRun(),
+          ),
+        ],
       ),
     );
   }
