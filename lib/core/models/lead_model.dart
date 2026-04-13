@@ -52,6 +52,13 @@ class LeadModel {
   final LeadUpdateStatus? latestStatus;
   final List<String> ibLeadIds;
 
+  // Drop tracking
+  final DropReason? dropReason;
+  final String? dropNotes;
+  final DateTime? droppedAt;
+  final String? droppedByUserId;
+  final bool returnToPoolApproved; // Admin/MIS can approve return to Get Lead pool
+
   // DPDP Act compliance fields
   final ConsentStatus consentStatus;
   final List<ConsentRecord> consentRecords;
@@ -98,6 +105,11 @@ class LeadModel {
     this.nextAction,
     this.latestStatus,
     this.ibLeadIds = const [],
+    this.dropReason,
+    this.dropNotes,
+    this.droppedAt,
+    this.droppedByUserId,
+    this.returnToPoolApproved = false,
     this.consentStatus = ConsentStatus.pending,
     this.consentRecords = const [],
     this.retentionStatus = RetentionStatus.active,
@@ -195,6 +207,11 @@ class LeadModel {
     bool clearNextAction = false,
     LeadUpdateStatus? latestStatus,
     List<String>? ibLeadIds,
+    DropReason? dropReason,
+    String? dropNotes,
+    DateTime? droppedAt,
+    String? droppedByUserId,
+    bool? returnToPoolApproved,
     ConsentStatus? consentStatus,
     List<ConsentRecord>? consentRecords,
     RetentionStatus? retentionStatus,
@@ -240,6 +257,11 @@ class LeadModel {
       nextAction: clearNextAction ? null : (nextAction ?? this.nextAction),
       latestStatus: latestStatus ?? this.latestStatus,
       ibLeadIds: ibLeadIds ?? this.ibLeadIds,
+      dropReason: dropReason ?? this.dropReason,
+      dropNotes: dropNotes ?? this.dropNotes,
+      droppedAt: droppedAt ?? this.droppedAt,
+      droppedByUserId: droppedByUserId ?? this.droppedByUserId,
+      returnToPoolApproved: returnToPoolApproved ?? this.returnToPoolApproved,
       consentStatus: consentStatus ?? this.consentStatus,
       consentRecords: consentRecords ?? this.consentRecords,
       retentionStatus: retentionStatus ?? this.retentionStatus,

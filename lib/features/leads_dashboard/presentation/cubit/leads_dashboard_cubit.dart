@@ -22,6 +22,7 @@ class LeadsDashboardState extends Equatable {
   final int hotCount;
   final int warmCount;
   final int coldCount;
+  final int droppedCount;
   final List<ActionTodayItem> actionToday;
   final Map<LeadStage, int> pipeline;
   final String? error;
@@ -32,35 +33,45 @@ class LeadsDashboardState extends Equatable {
     this.hotCount = 0,
     this.warmCount = 0,
     this.coldCount = 0,
+    this.droppedCount = 0,
     this.actionToday = const [],
     this.pipeline = const {},
     this.error,
   });
 
-  /// Conversion % from one stage to the next.
-  double conversionRate(LeadStage from, LeadStage to) {
-    final fromCount = pipeline[from] ?? 0;
-    final toCount = pipeline[to] ?? 0;
-    if (fromCount == 0) return 0;
-    return (toCount / fromCount * 100);
+  /// Overall conversion: Lead → Onboarded.
+  double get overallConversion {
+    final leadCount = pipeline[LeadStage.lead] ?? 0;
+    final onboardCount = pipeline[LeadStage.onboard] ?? 0;
+    if (leadCount == 0 && onboardCount == 0) return 0;
+    final total = leadCount +
+        (pipeline[LeadStage.profiling] ?? 0) +
+        (pipeline[LeadStage.engage] ?? 0) +
+        onboardCount;
+    if (total == 0) return 0;
+    return (onboardCount / total * 100);
   }
 
   @override
-  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, actionToday.length, pipeline, error];
+  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, droppedCount, actionToday.length, pipeline, error];
 }
 
 class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
   final String rmId;
+  final bool isRm; // false = TL/BM/Admin sees all leads
   final LeadRepository _repo = getIt<LeadRepository>();
 
-  LeadsDashboardCubit({required this.rmId}) : super(const LeadsDashboardState());
+  LeadsDashboardCubit({required this.rmId, this.isRm = true})
+      : super(const LeadsDashboardState());
 
   Future<void> load() async {
     emit(const LeadsDashboardState(isLoading: true));
     try {
+      // RM sees own leads; TL/BM/Admin see all
+      final filterRmId = isRm ? rmId : null;
       final results = await Future.wait([
-        _repo.getLeads(page: 1, pageSize: 500, assignedRmId: rmId),
-        _repo.getPipelineSummary(rmId),
+        _repo.getLeads(page: 1, pageSize: 500, assignedRmId: filterRmId),
+        _repo.getPipelineSummary(rmId), // pipeline still uses rmId for mock
         _repo.getHotLeads(rmId),
         _repo.getFollowUpsDueToday(rmId),
         _repo.getNewAssignments(rmId),
@@ -118,12 +129,15 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
         }
       }
 
+      final droppedC = allLeads.where((l) => l.stage == LeadStage.dropped).length;
+
       emit(LeadsDashboardState(
         isLoading: false,
-        totalLeads: allLeads.length,
+        totalLeads: allLeads.where((l) => l.stage.isActive).length,
         hotCount: hotC,
         warmCount: warmC,
         coldCount: coldC,
+        droppedCount: droppedC,
         actionToday: actions,
         pipeline: pipeline,
       ));

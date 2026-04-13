@@ -13,11 +13,12 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.navyDark,
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
                 width: 80,
@@ -55,8 +56,11 @@ class LoginScreen extends StatelessWidget {
               _roleButton(context, UserRole.checker, 'Checker', Icons.verified_user),
               const SizedBox(height: 12),
               _roleButton(context, UserRole.admin, 'Admin / MIS', Icons.admin_panel_settings),
+              const SizedBox(height: 12),
+              _roleButton(context, UserRole.ib, 'Investment Banking', Icons.business_center),
             ],
           ),
+        ),
         ),
       ),
     );

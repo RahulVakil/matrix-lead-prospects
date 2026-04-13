@@ -263,6 +263,59 @@ class MockLeadRepository implements LeadRepository {
     }
   }
 
+  // ── Drop / Return to Pool ────────────────────────────────────────────
+
+  @override
+  Future<LeadModel> dropLead(
+    String leadId, {
+    required DropReason reason,
+    String? notes,
+    required String droppedByUserId,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final idx = _leads.indexWhere((l) => l.id == leadId);
+    if (idx < 0) throw StateError('Lead not found: $leadId');
+    _leads[idx] = _leads[idx].copyWith(
+      stage: LeadStage.dropped,
+      previousStage: _leads[idx].stage,
+      dropReason: reason,
+      dropNotes: notes,
+      droppedAt: DateTime.now(),
+      droppedByUserId: droppedByUserId,
+      updatedAt: DateTime.now(),
+    );
+    return _leads[idx];
+  }
+
+  @override
+  Future<LeadModel> returnDroppedToPool(String leadId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final idx = _leads.indexWhere((l) => l.id == leadId);
+    if (idx < 0) throw StateError('Lead not found: $leadId');
+    final lead = _leads.removeAt(idx);
+    final poolLead = lead.copyWith(
+      stage: LeadStage.lead,
+      assignedRmId: 'POOL',
+      assignedRmName: 'Shared Pool',
+      returnToPoolApproved: true,
+      updatedAt: DateTime.now(),
+    );
+    _pool.add(poolLead);
+    return poolLead;
+  }
+
+  @override
+  Future<List<LeadModel>> getDroppedLeads() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return _leads.where((l) => l.stage == LeadStage.dropped).toList();
+  }
+
+  @override
+  Future<List<LeadModel>> getPoolLeads() async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    return List<LeadModel>.from(_pool);
+  }
+
   // ── Pool / Get Lead ─────────────────────────────────────────────────
 
   bool _matchesPoolFilters(

@@ -31,6 +31,7 @@ import '../widgets/deletion_request_sheet.dart';
 import '../widgets/edit_lead_sheet.dart';
 import '../widgets/privacy_consent_section.dart';
 import '../widgets/retention_banner.dart';
+import '../../../stage/presentation/widgets/drop_lead_sheet.dart';
 
 /// Lead Detail Hub — rebuilt to compass-real visual standard.
 /// Navy hero header with identity built in, content sheet body where the
@@ -323,6 +324,28 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     }
   }
 
+  Future<void> _dropLead() async {
+    if (_lead == null) return;
+    await DropLeadSheet.show(
+      context,
+      leadName: _lead!.fullName,
+      onDrop: (reason, notes) async {
+        final user = context.read<AuthCubit>().state.currentUser;
+        if (user == null) return;
+        await _leadRepo.dropLead(
+          _lead!.id,
+          reason: reason,
+          notes: notes,
+          droppedByUserId: user.id,
+        );
+        if (mounted) {
+          showCompassSnack(context, message: 'Lead dropped', type: CompassSnackType.warn);
+          context.pop();
+        }
+      },
+    );
+  }
+
   void _onMenuSelected(String value) {
     final lead = _lead;
     if (lead == null) return;
@@ -335,6 +358,9 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
         break;
       case 'edit':
         _editLead();
+        break;
+      case 'drop':
+        _dropLead();
         break;
       case 'export':
         _exportData();
@@ -407,6 +433,15 @@ class _LeadHeroHeader extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.download_outlined, size: 20),
                       title: Text('Export data'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'drop',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.remove_circle_outline, size: 20, color: Colors.orange),
+                      title: Text('Drop lead'),
                     ),
                   ),
                   PopupMenuItem(

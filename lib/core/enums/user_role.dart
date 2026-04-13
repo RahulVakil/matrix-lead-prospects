@@ -4,8 +4,9 @@ enum UserRole {
   branchManager('Branch Manager', 'BM'),
   checker('Checker', 'CHK'),
   compliance('Compliance', 'CMP'),
-  admin('Admin', 'ADM'),
-  management('Management', 'MGT');
+  admin('Admin / MIS', 'ADM'),
+  management('Management', 'MGT'),
+  ib('Investment Banking', 'IB');
 
   final String label;
   final String code;
@@ -13,18 +14,20 @@ enum UserRole {
   const UserRole(this.label, this.code);
 
   bool get canCreateLead =>
-      this == rm || this == teamLead || this == branchManager || this == admin;
+      this == rm || this == teamLead || this == admin;
 
   bool get canEditLead =>
-      this == rm || this == teamLead || this == branchManager || this == admin;
+      this == rm || this == teamLead || this == admin;
 
   bool get canAdvanceStage =>
-      this == rm || this == teamLead || this == branchManager || this == admin;
+      this == rm || this == teamLead || this == admin;
 
   bool get canReassignLead =>
-      this == teamLead || this == branchManager || this == admin;
+      this == teamLead || this == admin;
 
-  bool get canApproveProfile => this == checker;
+  bool get canApproveProfile => this == checker || this == admin;
+
+  bool get canApproveIB => this == branchManager || this == admin || this == ib;
 
   bool get canBulkAssign => this == admin;
 
@@ -33,4 +36,6 @@ enum UserRole {
 
   bool get canViewTeamLeads =>
       this == teamLead || this == branchManager || this == admin;
+
+  bool get isIB => this == ib;
 }

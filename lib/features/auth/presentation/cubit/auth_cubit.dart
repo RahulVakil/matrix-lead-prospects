@@ -35,6 +35,9 @@ class AuthCubit extends Cubit<AuthState> {
       case UserRole.admin:
         user = MockDataGenerators.admin;
         break;
+      case UserRole.ib:
+        user = MockDataGenerators.ibUser;
+        break;
       default:
         user = MockDataGenerators.defaultRm;
     }

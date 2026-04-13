@@ -103,7 +103,7 @@ class _InboxBodyState extends State<_InboxBody> {
                   children: [
                     _chip('All stages', state.stageFilter == null,
                         () => cubit.setStageFilter(null)),
-                    ...LeadStage.activePipeline.map((s) => _chip(
+                    ...[...LeadStage.activePipeline, LeadStage.dropped].map((s) => _chip(
                           s.label,
                           state.stageFilter == s,
                           () => cubit.setStageFilter(s),
@@ -295,6 +295,20 @@ class _LeadCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (lead.ibLeadIds.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.navyPrimary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'IB',
+                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),

@@ -90,6 +90,11 @@ class MockDataGenerators {
     branchName: 'Mumbai HQ', designation: 'Branch Head',
   );
 
+  static UserModel get ibUser => UserModel(
+    id: 'IB001', name: 'Siddharth Kapoor', empCode: 'IB001', role: UserRole.ib,
+    branchName: 'Mumbai HQ', designation: 'IB Analyst',
+  );
+
   static List<LeadModel> generateLeads(int count, {String? rmId}) {
     final rng = Random(42); // deterministic seed
     final leads = <LeadModel>[];
@@ -194,6 +199,19 @@ class MockDataGenerators {
         profiling: profiling,
         recentActivities: activities,
         nextAction: nextAction,
+        dropReason: stage == LeadStage.dropped
+            ? DropReason.values[seed % DropReason.values.length]
+            : null,
+        dropNotes: stage == LeadStage.dropped
+            ? 'Auto-seeded dropped lead for testing'
+            : null,
+        droppedAt: stage == LeadStage.dropped
+            ? now.subtract(Duration(days: rng.nextInt(14) + 1))
+            : null,
+        droppedByUserId: stage == LeadStage.dropped ? rm.id : null,
+        previousStage: stage == LeadStage.dropped
+            ? LeadStage.values[1 + seed % 3]
+            : null,
       ));
     }
 
@@ -355,15 +373,13 @@ class MockDataGenerators {
   }
 
   static LeadStage _stageForIndex(int seed, Random rng) {
-    // Distribution: 25% Lead, 30% Engage, 20% Opportunity, 15% Profiling, 5% Client, 5% other
+    // Logical funnel: Lead(35%) > Profiling(25%) > Engage(18%) > Onboard(10%) > Dropped(12%)
     final roll = (seed * 17 + rng.nextInt(10)) % 100;
-    if (roll < 25) return LeadStage.lead;
-    if (roll < 55) return LeadStage.engage;
-    if (roll < 75) return LeadStage.engage;
-    if (roll < 90) return LeadStage.profiling;
-    if (roll < 95) return LeadStage.onboard;
-    if (roll < 97) return LeadStage.parked;
-    return LeadStage.dormant;
+    if (roll < 35) return LeadStage.lead;
+    if (roll < 60) return LeadStage.profiling;
+    if (roll < 78) return LeadStage.engage;
+    if (roll < 88) return LeadStage.onboard;
+    return LeadStage.dropped;
   }
 
   static int _scoreForLead(LeadSource source, LeadStage stage, DateTime? lastContacted, Random rng) {

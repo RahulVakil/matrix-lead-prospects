@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 
 class PoolManagementScreen extends StatelessWidget {
   const PoolManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lead Pool Management'),
-        backgroundColor: AppColors.navyPrimary,
-        foregroundColor: AppColors.textOnDark,
-      ),
+    return HeroScaffold(
+      header: HeroAppBar.simple(title: 'Manage pool', subtitle: 'Lead pool management'),
       body: ListView(
         padding: const EdgeInsets.all(AppDimensions.screenPadding),
         children: [

@@ -3,6 +3,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/services/mock/mock_data_generators.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 
 class AssignmentScreen extends StatefulWidget {
   const AssignmentScreen({super.key});
@@ -31,11 +33,10 @@ class _AssignmentScreenState extends State<AssignmentScreen> {
   Widget build(BuildContext context) {
     final rms = MockDataGenerators.allRMs;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lead Assignment'),
-        backgroundColor: AppColors.navyPrimary,
-        foregroundColor: AppColors.textOnDark,
+    return HeroScaffold(
+      header: HeroAppBar.simple(
+        title: 'Assign leads',
+        subtitle: '${_unassignedLeads.length} unassigned',
         actions: [
           if (_selectedLeads.isNotEmpty)
             Padding(
@@ -157,7 +158,7 @@ class _AssignmentScreenState extends State<AssignmentScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _selectedLeads.isNotEmpty && _selectedRmId != null
+      bottomBar: _selectedLeads.isNotEmpty && _selectedRmId != null
           ? Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(

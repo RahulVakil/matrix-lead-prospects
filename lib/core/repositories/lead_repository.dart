@@ -78,6 +78,23 @@ abstract class LeadRepository {
   /// Append an arbitrary timeline entry — used by IB lead created, deal edits, etc.
   Future<void> appendTimelineEntry(TimelineEntryModel entry);
 
+  /// Drop a lead with a mandatory reason. Only RM can drop.
+  Future<LeadModel> dropLead(
+    String leadId, {
+    required DropReason reason,
+    String? notes,
+    required String droppedByUserId,
+  });
+
+  /// Admin/MIS approves a dropped lead to return to the Get Lead pool.
+  Future<LeadModel> returnDroppedToPool(String leadId);
+
+  /// Get all dropped leads (for Admin/MIS review).
+  Future<List<LeadModel>> getDroppedLeads();
+
+  /// All leads currently in the shared pool (for Admin Assign tab).
+  Future<List<LeadModel>> getPoolLeads();
+
   // ── Pool / Get Lead workflow ────────────────────────────────────────
 
   /// Total leads sitting in the shared pool, optionally filtered.

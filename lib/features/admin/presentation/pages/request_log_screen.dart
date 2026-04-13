@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 
 class RequestLogScreen extends StatelessWidget {
   const RequestLogScreen({super.key});
@@ -19,12 +21,8 @@ class RequestLogScreen extends StatelessWidget {
       processedAt: i >= 5 ? DateTime.now().subtract(Duration(hours: i * 3)) : null,
     ));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lead Request Log'),
-        backgroundColor: AppColors.navyPrimary,
-        foregroundColor: AppColors.textOnDark,
-      ),
+    return HeroScaffold(
+      header: HeroAppBar.simple(title: 'Request log', subtitle: '${requests.length} requests'),
       body: ListView.builder(
         padding: const EdgeInsets.all(AppDimensions.screenPadding),
         itemCount: requests.length,

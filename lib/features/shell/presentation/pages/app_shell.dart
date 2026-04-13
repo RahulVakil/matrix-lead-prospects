@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/enums/user_role.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../cubit/shell_cubit.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../../../clients/presentation/pages/client_list_screen.dart';
-import '../../../home/presentation/pages/home_screen.dart';
+import '../../../dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
+import '../../../ib_lead/presentation/pages/ib_dashboard_screen.dart';
+import '../../../leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
 import 'more_screen.dart';
 
-/// AppShell: only owns the bottom nav. Each tab is a full-screen with its own
-/// custom hero header. Mirrors compass_v2_mobile dashboard tab structure.
+/// AppShell: bottom nav. Tab 0 varies by role:
+/// RM → Leads Dashboard
+/// TL → Team Dashboard
+/// Checker/Admin → More (grid menu)
+/// IB → IB Dashboard
 class AppShell extends StatelessWidget {
   const AppShell({super.key});
 
@@ -23,25 +28,65 @@ class AppShell extends StatelessWidget {
       create: (_) => ShellCubit(),
       child: BlocBuilder<ShellCubit, int>(
         builder: (context, currentIndex) {
+          final tabs = _tabsForRole(user.role);
+          final clampedIndex = currentIndex.clamp(0, tabs.length - 1);
+
           return Scaffold(
             backgroundColor: AppColors.heroBackdrop,
             body: IndexedStack(
-              index: currentIndex,
-              children: const [
-                HomeScreen(),
-                ClientListScreen(),
-                _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-                MoreScreen(),
-              ],
+              index: clampedIndex,
+              children: tabs,
             ),
             bottomNavigationBar: BottomNavBar(
-              currentIndex: currentIndex,
+              currentIndex: clampedIndex,
               onTap: (i) => context.read<ShellCubit>().updateIndex(i),
             ),
           );
         },
       ),
     );
+  }
+
+  List<Widget> _tabsForRole(UserRole role) {
+    switch (role) {
+      case UserRole.rm:
+        return const [
+          LeadsDashboardScreen(),
+          ClientListScreen(),
+          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
+          MoreScreen(),
+        ];
+      case UserRole.teamLead:
+        return const [
+          TlDashboardScreen(),
+          LeadsDashboardScreen(),
+          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
+          MoreScreen(),
+        ];
+      case UserRole.ib:
+        return const [
+          IbDashboardScreen(),
+          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
+          MoreScreen(),
+          MoreScreen(), // placeholder to keep 4 tabs
+        ];
+      case UserRole.checker:
+      case UserRole.admin:
+      case UserRole.branchManager:
+        return const [
+          LeadsDashboardScreen(),
+          ClientListScreen(),
+          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
+          MoreScreen(),
+        ];
+      default:
+        return const [
+          LeadsDashboardScreen(),
+          ClientListScreen(),
+          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
+          MoreScreen(),
+        ];
+    }
   }
 }
 
@@ -71,15 +116,16 @@ class _PlaceholderTab extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 title,
-                style: AppTextStyles.heading3.copyWith(
-                  color: AppColors.textPrimary,
+                style: const TextStyle(
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Coming soon',
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint),
+                style: TextStyle(fontSize: 12, color: AppColors.textHint),
               ),
             ],
           ),

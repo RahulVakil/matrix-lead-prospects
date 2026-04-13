@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 
 class CheckerQueueScreen extends StatelessWidget {
   const CheckerQueueScreen({super.key});
@@ -18,12 +20,8 @@ class CheckerQueueScreen extends StatelessWidget {
       aumEstimate: [15000000.0, 8000000.0, 50000000.0, 3000000.0, 25000000.0, 7500000.0, 12000000.0, 45000000.0][i],
     ));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Checker Queue'),
-        backgroundColor: AppColors.navyPrimary,
-        foregroundColor: AppColors.textOnDark,
-      ),
+    return HeroScaffold(
+      header: HeroAppBar.simple(title: 'Profiling queue', subtitle: '${queueItems.length} pending'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

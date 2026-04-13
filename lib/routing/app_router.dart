@@ -10,6 +10,8 @@ import '../features/get_lead/presentation/pages/get_lead_screen.dart';
 import '../features/profiling/presentation/pages/profiling_start_screen.dart';
 import '../features/profiling/presentation/pages/checker_queue_screen.dart';
 import '../features/admin/presentation/pages/assignment_screen.dart';
+import '../features/admin/presentation/pages/dropped_leads_screen.dart';
+import '../features/admin/presentation/pages/manage_pool_screen.dart';
 import '../features/admin/presentation/pages/pool_management_screen.dart';
 import '../features/admin/presentation/pages/request_log_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
@@ -46,7 +48,13 @@ GoRouter createRouter(AuthCubit authCubit) {
       // Leads Dashboard — module landing page
       GoRoute(
         path: '/leads-dashboard',
-        pageBuilder: (context, state) => _fadePage(const LeadsDashboardScreen()),
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return _fadePage(LeadsDashboardScreen(
+            rmId: extra?['rmId'] as String?,
+            rmName: extra?['rmName'] as String?,
+          ));
+        },
       ),
 
       // Lead module routes
@@ -103,6 +111,14 @@ GoRouter createRouter(AuthCubit authCubit) {
       GoRoute(
         path: '/admin/pool',
         pageBuilder: (context, state) => _fadePage(const PoolManagementScreen()),
+      ),
+      GoRoute(
+        path: '/admin/dropped',
+        pageBuilder: (context, state) => _fadePage(const DroppedLeadsScreen()),
+      ),
+      GoRoute(
+        path: '/admin/manage-pool',
+        pageBuilder: (context, state) => _fadePage(const ManagePoolScreen()),
       ),
 
       // TL routes
