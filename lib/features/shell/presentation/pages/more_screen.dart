@@ -35,6 +35,15 @@ class MoreScreen extends StatelessWidget {
                 trailing: 'Pipeline, capture',
                 onTap: () => context.push('/leads-dashboard'),
               ),
+              if (user?.role == UserRole.branchManager ||
+                  user?.role == UserRole.admin)
+                _MoreRow(
+                  icon: Icons.fact_check_outlined,
+                  accent: AppColors.stageOpportunity,
+                  title: 'IB Approvals',
+                  trailing: 'Review pending',
+                  onTap: () => context.push('/ib-leads'),
+                ),
               _MoreRow(
                 icon: Icons.notifications_outlined,
                 accent: AppColors.warmAmber,
