@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/consent_type.dart';
+import '../../../../core/enums/lead_entity_type.dart';
 import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/models/consent_record.dart';
@@ -11,22 +12,22 @@ import '../../../../core/models/coverage_check_result.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/coverage_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
-import '../../../../routing/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_chip.dart';
+import '../../../../core/widgets/compass_dropdown.dart';
 import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../coverage/presentation/widgets/coverage_result_sheet.dart';
 
-/// Wealth lead capture: name, mobile, source, products. Coverage check fires
-/// on phone blur AND on company-name input (debounced). All four de-dupe
-/// scenarios (clear, existingClient, duplicateLead, requiresReview) are wired.
+/// Create Lead — full capture form with entity type, structured name,
+/// family/group with inline coverage, expanded sources, connect-rep.
 class CreateLeadScreen extends StatefulWidget {
   const CreateLeadScreen({super.key});
 
@@ -35,119 +36,152 @@ class CreateLeadScreen extends StatefulWidget {
 }
 
 class _CreateLeadScreenState extends State<CreateLeadScreen> {
-  static const _products = ['MF', 'PMS', 'AIF', 'Equity', 'Bonds', 'Insurance'];
-
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _companyController = TextEditingController();
-  final _phoneFocus = FocusNode();
-  Timer? _companyDebounce;
 
+  // Entity type
+  LeadEntityType _entityType = LeadEntityType.individual;
+  LeadSubType? _subType;
+
+  // Name fields
+  final _firstNameCtrl = TextEditingController();
+  final _middleNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
+  final _fullNameCtrl = TextEditingController(); // non-individual
+  final _familyGroupCtrl = TextEditingController();
+
+  // Contact
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneFocus = FocusNode();
+
+  // Source
   LeadSource? _source;
-  final Set<String> _productSet = {};
+
+  // Connect rep
+  bool _hasRequestedConnect = false;
+  final _repNameCtrl = TextEditingController();
+  final _repPhoneCtrl = TextEditingController();
+  final _repEmailCtrl = TextEditingController();
+
+  // State
   bool _saving = false;
   bool _checkingCoverage = false;
   CoverageCheckResult? _coverage;
   bool _consentGranted = false;
+  Timer? _nameDebounce;
 
   @override
   void initState() {
     super.initState();
-    _phoneFocus.addListener(_onPhoneFocusChange);
+    _phoneFocus.addListener(_onPhoneBlur);
   }
 
   @override
   void dispose() {
-    _companyDebounce?.cancel();
-    _phoneFocus.removeListener(_onPhoneFocusChange);
+    _nameDebounce?.cancel();
+    _phoneFocus.removeListener(_onPhoneBlur);
     _phoneFocus.dispose();
-    _nameController.dispose();
-    _phoneController.dispose();
-    _companyController.dispose();
+    _firstNameCtrl.dispose();
+    _middleNameCtrl.dispose();
+    _lastNameCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _familyGroupCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _repNameCtrl.dispose();
+    _repPhoneCtrl.dispose();
+    _repEmailCtrl.dispose();
     super.dispose();
   }
 
-  // ── Coverage check triggers ────────────────────────────────────────
+  // ── Computed name ──────────────────────────────────────────────────
 
-  Future<void> _runCoverageCheck() async {
-    final phone = _phoneController.text.trim();
-    final name = _nameController.text.trim();
-    final company = _companyController.text.trim();
-    if (phone.isEmpty && name.isEmpty && company.isEmpty) return;
+  String get _computedName {
+    if (_entityType == LeadEntityType.nonIndividual) {
+      return _fullNameCtrl.text.trim();
+    }
+    final parts = [
+      _firstNameCtrl.text.trim(),
+      _middleNameCtrl.text.trim(),
+      _lastNameCtrl.text.trim(),
+    ].where((p) => p.isNotEmpty);
+    return parts.join(' ');
+  }
+
+  // ── Coverage ──────────────────────────────────────────────────────
+
+  void _onPhoneBlur() {
+    if (_phoneFocus.hasFocus) return;
+    if (_phoneCtrl.text.trim().length >= 10) _runCoverage();
+  }
+
+  void _onNameOrFamilyChanged(String _) {
+    _nameDebounce?.cancel();
+    _nameDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (_computedName.length >= 3 || _familyGroupCtrl.text.trim().length >= 3) {
+        _runCoverage();
+      }
+    });
+  }
+
+  Future<void> _runCoverage() async {
+    final name = _computedName;
+    final phone = _phoneCtrl.text.trim();
+    final family = _familyGroupCtrl.text.trim();
+    if (name.isEmpty && phone.isEmpty && family.isEmpty) return;
 
     setState(() => _checkingCoverage = true);
     final result = await getIt<CoverageRepository>().checkCoverage(
-      phone: phone.isEmpty ? null : phone,
       name: name.isEmpty ? null : name,
-      company: company.isEmpty ? null : company,
+      phone: phone.length >= 10 ? phone : null,
+      company: family.isEmpty ? null : family,
+      groupName: family.isEmpty ? null : family,
     );
     if (!mounted) return;
     setState(() {
       _coverage = result;
       _checkingCoverage = false;
     });
-
-    if (result.canProceed) return;
-    await _showCoverageSheet(result);
-  }
-
-  Future<void> _showCoverageSheet(CoverageCheckResult result) async {
-    final decision = await showCoverageResultSheet(context, result);
-    if (!mounted || decision == null) return;
-    switch (decision) {
-      case CoverageDecision.cancel:
-        showCompassSnack(context, message: 'Capture cancelled');
-        context.pop();
-        break;
-      case CoverageDecision.requestReassignment:
-        showCompassSnack(
-          context,
-          message: 'Reassignment requested',
-          type: CompassSnackType.warn,
-        );
-        context.pop();
-        break;
-      case CoverageDecision.saveAnyway:
-      case CoverageDecision.proceed:
-        // Stay on form. The user proceeds with capture.
-        break;
+    if (!result.canProceed) {
+      final decision = await showCoverageResultSheet(context, result);
+      if (!mounted || decision == null) return;
+      if (decision == CoverageDecision.cancel ||
+          decision == CoverageDecision.requestReassignment) {
+        if (mounted) {
+          showCompassSnack(
+            context,
+            message: decision == CoverageDecision.requestReassignment
+                ? 'Reassignment requested'
+                : 'Cancelled',
+          );
+          context.pop();
+        }
+      }
     }
   }
 
-  void _onPhoneFocusChange() {
-    if (_phoneFocus.hasFocus) return;
-    if (_phoneController.text.trim().length >= 10) {
-      _runCoverageCheck();
-    }
+  // ── Save ───────────────────────────────────────────────────────────
+
+  bool get _canSave {
+    final hasName = _computedName.isNotEmpty;
+    final hasPhone = _phoneCtrl.text.trim().length >= 10;
+    return hasName &&
+        hasPhone &&
+        _source != null &&
+        _consentGranted &&
+        (_coverage?.status != CoverageStatus.existingClient);
   }
-
-  void _onCompanyChanged(String _) {
-    _companyDebounce?.cancel();
-    if (_companyController.text.trim().length < 3) return;
-    _companyDebounce = Timer(const Duration(milliseconds: 500), _runCoverageCheck);
-  }
-
-  // ── Save logic ─────────────────────────────────────────────────────
-
-  bool get _canSave =>
-      _nameController.text.trim().isNotEmpty &&
-      _phoneController.text.trim().length >= 10 &&
-      _source != null &&
-      _productSet.isNotEmpty &&
-      _consentGranted &&
-      (_coverage?.status != CoverageStatus.existingClient);
 
   Future<void> _save() async {
     if (_formKey.currentState?.validate() != true) return;
-    if (_source == null || _productSet.isEmpty) return;
+    if (!_canSave) return;
     final user = context.read<AuthCubit>().state.currentUser;
     if (user == null) return;
 
     setState(() => _saving = true);
     final now = DateTime.now();
     final leadId = 'LEAD_${now.millisecondsSinceEpoch}';
-    final consentRecord = ConsentRecord(
+    final consent = ConsentRecord(
       id: 'CON_${now.millisecondsSinceEpoch}',
       leadId: leadId,
       consentType: DataConsentType.leadCapture,
@@ -156,26 +190,46 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       grantedByUserName: user.name,
       purposeStatement: DataConsentType.leadCapture.purposeStatement,
     );
+
     final lead = LeadModel(
       id: leadId,
-      fullName: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      companyName: _companyController.text.trim().isEmpty
+      entityType: _entityType,
+      subType: _entityType == LeadEntityType.nonIndividual ? _subType : null,
+      fullName: _computedName,
+      firstName: _entityType == LeadEntityType.individual
+          ? _firstNameCtrl.text.trim()
+          : null,
+      middleName: _entityType == LeadEntityType.individual
+          ? (_middleNameCtrl.text.trim().isEmpty
+              ? null
+              : _middleNameCtrl.text.trim())
+          : null,
+      lastName: _entityType == LeadEntityType.individual
+          ? _lastNameCtrl.text.trim()
+          : null,
+      phone: _phoneCtrl.text.trim(),
+      email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+      groupName: _familyGroupCtrl.text.trim().isEmpty
           ? null
-          : _companyController.text.trim(),
-      groupName: _companyController.text.trim().isEmpty
-          ? null
-          : _companyController.text.trim(),
+          : _familyGroupCtrl.text.trim(),
+      companyName: _entityType == LeadEntityType.nonIndividual
+          ? _fullNameCtrl.text.trim()
+          : (_familyGroupCtrl.text.trim().isEmpty
+              ? null
+              : _familyGroupCtrl.text.trim()),
       source: _source!,
       stage: LeadStage.lead,
       score: _source!.baseScore,
-      productInterest: _productSet.toList(),
       assignedRmId: user.id,
       assignedRmName: user.name,
       createdAt: now,
       updatedAt: now,
       consentStatus: ConsentStatus.granted,
-      consentRecords: [consentRecord],
+      consentRecords: [consent],
+      hasRequestedConnect: _hasRequestedConnect,
+      connectRepName: _hasRequestedConnect ? _repNameCtrl.text.trim() : null,
+      connectRepPhone: _hasRequestedConnect ? _repPhoneCtrl.text.trim() : null,
+      connectRepEmail: _hasRequestedConnect ? _repEmailCtrl.text.trim() : null,
     );
 
     await getIt<LeadRepository>().createLead(lead);
@@ -207,87 +261,225 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
           children: [
-            CompassTextField(
-              controller: _nameController,
-              label: 'Full name',
-              hint: 'e.g. Rajesh Mehta',
-              isRequired: true,
-              textInputAction: TextInputAction.next,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Required' : null,
+            // ── Entity type toggle ──────────────────────────────
+            const CompassSectionHeader(title: 'Lead type'),
+            const SizedBox(height: 10),
+            Row(
+              children: LeadEntityType.values.map((t) {
+                final selected = _entityType == t;
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: t == LeadEntityType.individual ? 5 : 0,
+                      left: t == LeadEntityType.nonIndividual ? 5 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: () => setState(() {
+                        _entityType = t;
+                        _coverage = null;
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.navyPrimary
+                              : AppColors.surfacePrimary,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected
+                                ? AppColors.navyPrimary
+                                : AppColors.borderDefault,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            t.label,
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 16),
+
+            // ── Sub-type (Non-Individual only) ──────────────────
+            if (_entityType == LeadEntityType.nonIndividual) ...[
+              const SizedBox(height: 16),
+              CompassDropdown<LeadSubType>(
+                label: 'Entity sub-type',
+                isRequired: true,
+                value: _subType,
+                hint: 'Select type',
+                items: LeadSubType.values
+                    .map((s) => CompassDropdownItem(value: s, label: s.label))
+                    .toList(),
+                onChanged: (v) => setState(() => _subType = v),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+
+            // ── Name fields ─────────────────────────────────────
+            const CompassSectionHeader(title: 'Name'),
+            const SizedBox(height: 10),
+            if (_entityType == LeadEntityType.individual) ...[
+              Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: CompassTextField(
+                      controller: _firstNameCtrl,
+                      label: 'First name',
+                      isRequired: true,
+                      onChanged: _onNameOrFamilyChanged,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 3,
+                    child: CompassTextField(
+                      controller: _middleNameCtrl,
+                      label: 'Middle',
+                      onChanged: _onNameOrFamilyChanged,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _lastNameCtrl,
+                label: 'Last name',
+                isRequired: true,
+                onChanged: _onNameOrFamilyChanged,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+            ] else ...[
+              CompassTextField(
+                controller: _fullNameCtrl,
+                label: 'Full name / Entity name',
+                isRequired: true,
+                onChanged: _onNameOrFamilyChanged,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+            ],
+            const SizedBox(height: 12),
             CompassTextField(
-              controller: _phoneController,
-              focusNode: _phoneFocus,
-              label: 'Mobile',
-              hint: '10-digit number',
-              isRequired: true,
-              keyboardType: TextInputType.phone,
-              prefixIcon: Icons.phone_outlined,
-              validator: (v) =>
-                  v == null || v.trim().length < 10 ? 'Enter 10 digits' : null,
+              controller: _familyGroupCtrl,
+              label: 'Family / Group name',
+              hint: 'Coverage check runs on this',
+              prefixIcon: Icons.family_restroom_outlined,
+              onChanged: _onNameOrFamilyChanged,
             ),
             const SizedBox(height: 8),
-            _CoverageStatusBadge(
+            _CoverageBadge(
               checking: _checkingCoverage,
               result: _coverage,
               onTap: _coverage != null && !_coverage!.canProceed
-                  ? () => _showCoverageSheet(_coverage!)
+                  ? () => showCoverageResultSheet(context, _coverage!)
                   : null,
             ),
-            const SizedBox(height: 16),
-            CompassTextField(
-              controller: _companyController,
-              label: 'Company / Group',
-              hint: 'Optional — auto-checks coverage',
-              prefixIcon: Icons.apartment_outlined,
-              onChanged: _onCompanyChanged,
-            ),
-            const SizedBox(height: 24),
 
+            const SizedBox(height: 20),
+
+            // ── Contact ─────────────────────────────────────────
+            const CompassSectionHeader(title: 'Contact'),
+            const SizedBox(height: 10),
+            CompassTextField(
+              controller: _phoneCtrl,
+              focusNode: _phoneFocus,
+              label: 'Mobile number',
+              isRequired: true,
+              hint: 'Indian or international',
+              keyboardType: TextInputType.phone,
+              prefixIcon: Icons.phone_outlined,
+              validator: (v) =>
+                  v == null || v.trim().length < 10 ? '10+ digits' : null,
+            ),
+            const SizedBox(height: 12),
+            CompassTextField(
+              controller: _emailCtrl,
+              label: 'Email',
+              hint: 'Optional',
+              keyboardType: TextInputType.emailAddress,
+              prefixIcon: Icons.email_outlined,
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Source ───────────────────────────────────────────
             const CompassSectionHeader(title: 'Source'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: LeadSource.values
-                  .map(
-                    (s) => CompassChoiceChip<LeadSource>(
-                      value: s,
-                      groupValue: _source,
-                      label: s.label,
-                      onSelected: (v) => setState(() => _source = v),
-                    ),
-                  )
+                  .map((s) => CompassChoiceChip<LeadSource>(
+                        value: s,
+                        groupValue: _source,
+                        label: s.label,
+                        onSelected: (v) => setState(() => _source = v),
+                      ))
                   .toList(),
             ),
-            const SizedBox(height: 24),
 
-            const CompassSectionHeader(title: 'Product Interest'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _products
-                  .map(
-                    (p) => CompassFilterChip(
-                      selected: _productSet.contains(p),
-                      label: p,
-                      onTap: () => setState(() {
-                        if (_productSet.contains(p)) {
-                          _productSet.remove(p);
-                        } else {
-                          _productSet.add(p);
-                        }
-                      }),
-                    ),
-                  )
-                  .toList(),
+            const SizedBox(height: 20),
+
+            // ── Connect rep ─────────────────────────────────────
+            const CompassSectionHeader(title: 'Connect request'),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Lead has requested to connect with a representative?',
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ),
+                Switch(
+                  value: _hasRequestedConnect,
+                  activeColor: AppColors.navyPrimary,
+                  onChanged: (v) => setState(() => _hasRequestedConnect = v),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
+            if (_hasRequestedConnect) ...[
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _repNameCtrl,
+                label: 'Representative name',
+                isRequired: true,
+              ),
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _repPhoneCtrl,
+                label: 'Representative mobile',
+                keyboardType: TextInputType.phone,
+                prefixIcon: Icons.phone_outlined,
+              ),
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _repEmailCtrl,
+                label: 'Representative email',
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.email_outlined,
+              ),
+            ],
 
-            // DPDP consent
+            const SizedBox(height: 20),
+
+            // ── Consent ─────────────────────────────────────────
             GestureDetector(
               onTap: () => setState(() => _consentGranted = !_consentGranted),
               child: Container(
@@ -307,7 +499,8 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                     Checkbox(
                       value: _consentGranted,
                       activeColor: AppColors.navyPrimary,
-                      onChanged: (v) => setState(() => _consentGranted = v ?? false),
+                      onChanged: (v) =>
+                          setState(() => _consentGranted = v ?? false),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     const SizedBox(width: 4),
@@ -345,18 +538,16 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Inline coverage status badge (below phone field)
-// ────────────────────────────────────────────────────────────────────
 
-class _CoverageStatusBadge extends StatelessWidget {
+class _CoverageBadge extends StatelessWidget {
   final bool checking;
   final CoverageCheckResult? result;
   final VoidCallback? onTap;
 
-  const _CoverageStatusBadge({
+  const _CoverageBadge({
     required this.checking,
     required this.result,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
@@ -375,8 +566,10 @@ class _CoverageStatusBadge extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text('Checking coverage…',
-                style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+            Text(
+              'Checking coverage…',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+            ),
           ],
         ),
       );
@@ -402,46 +595,48 @@ class _CoverageStatusBadge extends StatelessWidget {
       CoverageStatus.existingClient =>
         'Already a client of ${result!.existingRmName ?? "another RM"}',
       CoverageStatus.duplicateLead =>
-        'Duplicate lead with ${result!.existingRmName ?? "another RM"}',
+        'Duplicate with ${result!.existingRmName ?? "another RM"}',
       CoverageStatus.requiresReview =>
         '${result!.alternateMatches.length} possible matches',
       CoverageStatus.dnd => 'Do not disturb',
     };
 
+    // Show family match if present
+    final familyHint = result!.familyMatch != null
+        ? ' · Family: ${result!.familyMatch!.groupName} (${result!.familyMatch!.memberCount} members)'
+        : '';
+
     final body = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Flexible(
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
-              label,
+              '$label$familyHint',
               style: AppTextStyles.caption.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (onTap != null) ...[
-            const SizedBox(width: 4),
+          if (onTap != null)
             Icon(Icons.chevron_right, size: 14, color: color),
-          ],
         ],
       ),
     );
 
-    if (onTap == null) return Padding(padding: const EdgeInsets.only(left: 4), child: body);
     return Padding(
       padding: const EdgeInsets.only(left: 4),
-      child: GestureDetector(onTap: onTap, child: body),
+      child: onTap != null
+          ? GestureDetector(onTap: onTap, child: body)
+          : body,
     );
   }
 }

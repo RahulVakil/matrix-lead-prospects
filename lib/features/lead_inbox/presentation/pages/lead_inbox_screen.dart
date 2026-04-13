@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_decorations.dart';
-import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/models/lead_model.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/compass_chip.dart';
+import '../../../../core/widgets/compass_text_field.dart';
+import '../../../../core/widgets/hero_app_bar.dart';
+import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../cubit/lead_inbox_cubit.dart';
 
+/// All Leads listing — alphabetical default, temperature + stage filters,
+/// sort selector, search, IB convert action per card.
 class LeadInboxScreen extends StatelessWidget {
   const LeadInboxScreen({super.key});
 
@@ -21,24 +26,24 @@ class LeadInboxScreen extends StatelessWidget {
 
     return BlocProvider(
       create: (_) => LeadInboxCubit(rmId: user.id)..loadLeads(refresh: true),
-      child: const _LeadInboxBody(),
+      child: const _InboxBody(),
     );
   }
 }
 
-class _LeadInboxBody extends StatefulWidget {
-  const _LeadInboxBody();
+class _InboxBody extends StatefulWidget {
+  const _InboxBody();
 
   @override
-  State<_LeadInboxBody> createState() => _LeadInboxBodyState();
+  State<_InboxBody> createState() => _InboxBodyState();
 }
 
-class _LeadInboxBodyState extends State<_LeadInboxBody> {
-  final _searchController = TextEditingController();
+class _InboxBodyState extends State<_InboxBody> {
+  final _searchCtrl = TextEditingController();
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -46,144 +51,183 @@ class _LeadInboxBodyState extends State<_LeadInboxBody> {
   Widget build(BuildContext context) {
     return BlocBuilder<LeadInboxCubit, LeadInboxState>(
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: AppColors.surfaceTertiary,
-          appBar: AppBar(
-            title: const Text('Leads'),
+        final cubit = context.read<LeadInboxCubit>();
+        return HeroScaffold(
+          header: HeroAppBar.simple(title: 'All leads', subtitle: '${state.totalCount} total'),
+          floatingActionButton: FloatingActionButton(
             backgroundColor: AppColors.navyPrimary,
-            foregroundColor: AppColors.textOnDark,
-            elevation: 0,
+            onPressed: () => context.push('/leads/new'),
+            child: const Icon(Icons.add, color: Colors.white),
           ),
           body: Column(
             children: [
-              Container(
-                color: AppColors.surfacePrimary,
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (q) => context.read<LeadInboxCubit>().search(q),
-                  decoration: AppDecorations.inputDecoration(
-                    label: '',
-                    hint: 'Search by name or phone',
-                    suffixIcon: const Icon(Icons.search, color: AppColors.textHint),
-                  ).copyWith(
-                    floatingLabelBehavior: FloatingLabelBehavior.never,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                  style: AppTextStyles.bodyMedium,
+              // Search
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                child: CompassTextField(
+                  controller: _searchCtrl,
+                  hint: 'Search by name, phone, company…',
+                  prefixIcon: Icons.search,
+                  onChanged: cubit.search,
                 ),
               ),
-              Container(
-                color: AppColors.surfacePrimary,
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: SingleChildScrollView(
+
+              // Temperature filter chips
+              SizedBox(
+                height: 42,
+                child: ListView(
                   scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _filterChip(context, state, null, 'All', state.totalCount),
-                      ...LeadTemperature.values
-                          .where((t) => t != LeadTemperature.dormant)
-                          .map((t) => _filterChip(
-                                context,
-                                state,
-                                t,
-                                t.label,
-                                state.temperatureCounts[t] ?? 0,
-                              )),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  children: [
+                    _chip('All', state.temperatureFilter == null,
+                        () => cubit.setTemperatureFilter(null)),
+                    ...LeadTemperature.values
+                        .where((t) => t != LeadTemperature.dormant)
+                        .map((t) => _chip(
+                              t.label,
+                              state.temperatureFilter == t,
+                              () => cubit.setTemperatureFilter(t),
+                              color: t.color,
+                              count: state.temperatureCounts[t],
+                            )),
+                  ],
                 ),
               ),
+
+              // Stage filter chips
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  children: [
+                    _chip('All stages', state.stageFilter == null,
+                        () => cubit.setStageFilter(null)),
+                    ...LeadStage.activePipeline.map((s) => _chip(
+                          s.label,
+                          state.stageFilter == s,
+                          () => cubit.setStageFilter(s),
+                          color: s.color,
+                        )),
+                  ],
+                ),
+              ),
+
+              // Sort
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                child: Row(
+                  children: [
+                    Text('Sort: ', style: AppTextStyles.caption),
+                    const SizedBox(width: 4),
+                    DropdownButton<String>(
+                      value: state.sortBy ?? 'name',
+                      underline: const SizedBox.shrink(),
+                      isDense: true,
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: AppColors.navyPrimary,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'name', child: Text('Name A-Z')),
+                        DropdownMenuItem(value: 'score', child: Text('Score')),
+                        DropdownMenuItem(value: 'lastActivity', child: Text('Last activity')),
+                        DropdownMenuItem(value: 'aum', child: Text('AUM')),
+                        DropdownMenuItem(value: 'created', child: Text('Created')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) cubit.setSort(v);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
               const Divider(height: 1),
+
+              // List
               Expanded(
                 child: state.isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.navyPrimary))
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.navyPrimary,
+                        ),
+                      )
                     : state.leads.isEmpty
-                        ? _emptyState(context)
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.inbox_outlined,
+                                    size: 44, color: AppColors.textHint),
+                                const SizedBox(height: 12),
+                                Text('No leads match',
+                                    style: AppTextStyles.bodyLarge),
+                                const SizedBox(height: 4),
+                                TextButton(
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    cubit.setTemperatureFilter(null);
+                                    cubit.setStageFilter(null);
+                                    cubit.search('');
+                                  },
+                                  child: const Text('Clear filters'),
+                                ),
+                              ],
+                            ),
+                          )
                         : RefreshIndicator(
                             color: AppColors.navyPrimary,
-                            onRefresh: () => context.read<LeadInboxCubit>().loadLeads(refresh: true),
+                            onRefresh: () => cubit.loadLeads(refresh: true),
                             child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                              padding: const EdgeInsets.fromLTRB(14, 10, 14, 96),
                               itemCount: state.leads.length,
-                              itemBuilder: (context, index) {
-                                return _LeadListTile(
-                                  lead: state.leads[index],
-                                  onTap: () => context.push(RouteNames.leadDetailPath(state.leads[index].id)),
-                                );
-                              },
+                              itemBuilder: (_, i) => _LeadCard(
+                                lead: state.leads[i],
+                                onTap: () => context.push(
+                                  RouteNames.leadDetailPath(state.leads[i].id),
+                                ),
+                                onConvertIB: () => context.push(
+                                  '/ib-leads/new',
+                                  extra: {
+                                    'clientName': state.leads[i].fullName,
+                                    'companyName': state.leads[i].companyName,
+                                  },
+                                ),
+                              ),
                             ),
                           ),
               ),
             ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => context.push('/leads/new'),
-            backgroundColor: AppColors.navyPrimary,
-            icon: const Icon(Icons.add, color: AppColors.textOnDark),
-            label: Text('New Lead', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textOnDark)),
           ),
         );
       },
     );
   }
 
-  Widget _filterChip(BuildContext context, LeadInboxState state, LeadTemperature? temp, String label, int count) {
-    final isSelected = (state.temperatureFilter == temp) && (temp != null || state.temperatureFilter == null);
-    final color = temp?.color ?? AppColors.navyPrimary;
-
+  Widget _chip(String label, bool selected, VoidCallback onTap,
+      {Color? color, int? count}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: FilterChip(
-        selected: isSelected,
-        showCheckmark: false,
-        label: Text('$label  $count'),
-        onSelected: (_) => context.read<LeadInboxCubit>().setTemperatureFilter(temp),
-        selectedColor: color.withValues(alpha: 0.15),
-        backgroundColor: AppColors.surfaceTertiary,
-        labelStyle: AppTextStyles.bodySmall.copyWith(
-          color: isSelected ? color : AppColors.textSecondary,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-        ),
-        shape: const StadiumBorder(),
-        side: BorderSide(
-          color: isSelected ? color.withValues(alpha: 0.4) : AppColors.borderDefault,
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.inbox_outlined, size: 44, color: AppColors.textHint),
-            const SizedBox(height: 12),
-            Text('No leads match', style: AppTextStyles.bodyLarge),
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed: () {
-                _searchController.clear();
-                context.read<LeadInboxCubit>().setTemperatureFilter(null);
-                context.read<LeadInboxCubit>().search('');
-              },
-              child: const Text('Clear filters'),
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.only(right: 6),
+      child: CompassFilterChip(
+        selected: selected,
+        label: count != null ? '$label $count' : label,
+        onTap: onTap,
+        color: color,
       ),
     );
   }
 }
 
-class _LeadListTile extends StatelessWidget {
+class _LeadCard extends StatelessWidget {
   final LeadModel lead;
   final VoidCallback onTap;
+  final VoidCallback onConvertIB;
 
-  const _LeadListTile({required this.lead, required this.onTap});
+  const _LeadCard({
+    required this.lead,
+    required this.onTap,
+    required this.onConvertIB,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -191,24 +235,27 @@ class _LeadListTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: AppColors.surfacePrimary,
-        borderRadius: BorderRadius.circular(AppDimensions.cardRadius),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppDimensions.cardRadius),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppDimensions.cardRadius),
-              border: Border.all(color: AppColors.cardBorder),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.borderDefault.withValues(alpha: 0.5),
+              ),
             ),
             child: Row(
               children: [
+                // Temperature bar
                 Container(
-                  width: 10,
-                  height: 10,
+                  width: 3,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: lead.temperature.color,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -217,36 +264,64 @@ class _LeadListTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        lead.fullName,
-                        style: AppTextStyles.labelLarge,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              lead.fullName,
+                              style: AppTextStyles.labelLarge.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: lead.stage.color.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              lead.stage.label,
+                              style: AppTextStyles.caption.copyWith(
+                                color: lead.stage.color,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
-                        lead.lastContactDisplay,
-                        style: AppTextStyles.bodySmall,
+                        '${lead.source.label} · ${lead.lastContactDisplay}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textHint,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: lead.stage.color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    lead.stage.label,
-                    style: AppTextStyles.caption.copyWith(
-                      color: lead.stage.color,
-                      fontWeight: FontWeight.w600,
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textHint),
+                  padding: EdgeInsets.zero,
+                  onSelected: (v) {
+                    if (v == 'ib') onConvertIB();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'ib',
+                      child: Text('Convert to IB lead'),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                const Icon(Icons.chevron_right, color: AppColors.textHint, size: 20),
               ],
             ),
           ),

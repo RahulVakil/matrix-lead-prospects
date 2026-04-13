@@ -20,6 +20,7 @@ import '../features/ib_lead/presentation/pages/ib_lead_capture_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_detail_screen.dart';
 import '../features/leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
 import '../features/notifications/presentation/pages/notifications_screen.dart';
+import '../features/profiling_wizard/presentation/pages/profiling_wizard_screen.dart';
 
 GoRouter createRouter(AuthCubit authCubit) {
   return GoRouter(
@@ -68,7 +69,21 @@ GoRouter createRouter(AuthCubit authCubit) {
         ),
       ),
 
-      // Profiling routes
+      // Profiling wizard
+      GoRoute(
+        path: '/profiling-wizard/:leadId',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return _fadePage(
+            ProfilingWizardScreen(
+              leadId: state.pathParameters['leadId']!,
+              leadName: extra?['leadName'] as String? ?? 'Lead',
+            ),
+          );
+        },
+      ),
+
+      // Profiling routes (legacy)
       GoRoute(
         path: '/profiling/:leadId/start',
         pageBuilder: (context, state) => _fadePage(
