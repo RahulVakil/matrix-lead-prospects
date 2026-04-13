@@ -8,6 +8,7 @@ import '../../models/activity_model.dart';
 import '../../models/client_master_record.dart';
 import '../../models/client_model.dart';
 import '../../models/deal_info_model.dart';
+import '../../models/family_group_model.dart';
 import '../../models/next_action_model.dart';
 import '../../models/profiling_model.dart';
 import '../../models/user_model.dart';
@@ -262,6 +263,61 @@ class MockDataGenerators {
         updatedAt: createdAt,
         recentActivities: const [],
       ));
+    }
+    return out;
+  }
+
+  /// Build family groups from client master records by grouping on groupName.
+  static List<FamilyGroupModel> generateFamilyGroups(
+    List<ClientMasterRecord> records,
+  ) {
+    final byGroup = <String, List<ClientMasterRecord>>{};
+    for (final r in records) {
+      if (r.groupName != null && r.groupName!.isNotEmpty) {
+        byGroup.putIfAbsent(r.groupName!, () => []).add(r);
+      }
+    }
+
+    final rng = Random(21);
+    final relationships = ['Self', 'Spouse', 'Parent', 'Child', 'Sibling'];
+    final out = <FamilyGroupModel>[];
+    var idx = 0;
+    for (final entry in byGroup.entries) {
+      if (entry.value.length < 2 && rng.nextBool()) continue;
+      final members = entry.value.map((r) {
+        return FamilyMember(
+          name: r.clientName,
+          clientCode: r.id,
+          phone: r.phone,
+          relationship: relationships[rng.nextInt(relationships.length)],
+          isClient: r.source == CoverageSource.clientMaster,
+          assignedRmName: r.rmName,
+        );
+      }).toList();
+
+      final extras = rng.nextInt(2) + 1;
+      for (var j = 0; j < extras; j++) {
+        final fn = _firstNames[(idx * 3 + j * 7) % _firstNames.length];
+        final ln = entry.key.split(' ').first;
+        members.add(FamilyMember(
+          name: '$fn $ln',
+          relationship: relationships[(j + 2) % relationships.length],
+          isClient: rng.nextBool(),
+          assignedRmName: entry.value.first.rmName,
+        ));
+      }
+
+      final primaryRm = entry.value.first;
+      out.add(FamilyGroupModel(
+        id: 'FAM${(idx + 1).toString().padLeft(4, '0')}',
+        groupName: entry.key,
+        members: members,
+        primaryRmId: primaryRm.rmId,
+        primaryRmName: primaryRm.rmName,
+        totalAum: (rng.nextInt(50) + 5) * 1000000.0,
+        city: primaryRm.city,
+      ));
+      idx++;
     }
     return out;
   }

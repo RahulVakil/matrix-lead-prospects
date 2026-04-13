@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/activity_type.dart';
+import '../../../../core/enums/audit_action.dart';
+import '../../../../core/enums/retention_status.dart';
+import '../../../../core/models/audit_log_entry.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/models/next_action_model.dart';
 import '../../../../core/models/timeline_entry_model.dart';
 import '../../../../core/repositories/activity_repository.dart';
+import '../../../../core/repositories/audit_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -20,6 +25,12 @@ import '../../../activity/presentation/widgets/activity_quick_log_sheet.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../stage/presentation/widgets/mark_lost_sheet.dart';
 import '../../../stage/presentation/widgets/stage_advance_sheet.dart';
+import '../widgets/audit_trail_section.dart';
+import '../widgets/data_export_sheet.dart';
+import '../widgets/deletion_request_sheet.dart';
+import '../widgets/edit_lead_sheet.dart';
+import '../widgets/privacy_consent_section.dart';
+import '../widgets/retention_banner.dart';
 
 /// Lead Detail Hub — rebuilt to compass-real visual standard.
 /// Navy hero header with identity built in, content sheet body where the
@@ -35,9 +46,11 @@ class LeadDetailScreen extends StatefulWidget {
 class _LeadDetailScreenState extends State<LeadDetailScreen> {
   final LeadRepository _leadRepo = getIt<LeadRepository>();
   final ActivityRepository _activityRepo = getIt<ActivityRepository>();
+  final AuditRepository _auditRepo = getIt<AuditRepository>();
 
   LeadModel? _lead;
   List<TimelineEntryModel> _timeline = const [];
+  List<AuditLogEntry> _auditEntries = const [];
   bool _isLoading = true;
 
   @override
@@ -51,10 +64,26 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     try {
       final lead = await _leadRepo.getLeadById(widget.leadId);
       final timeline = await _leadRepo.getTimeline(widget.leadId);
+      final audit = await _auditRepo.getForEntity('lead', widget.leadId);
+
+      // Log PII view in audit trail
+      final user = context.read<AuthCubit>().state.currentUser;
+      if (user != null) {
+        await _auditRepo.log(
+          userId: user.id,
+          userName: user.name,
+          action: AuditAction.viewPII,
+          entityType: 'lead',
+          entityId: widget.leadId,
+          details: 'Opened lead detail',
+        );
+      }
+
       if (!mounted) return;
       setState(() {
         _lead = lead;
         _timeline = timeline;
+        _auditEntries = audit;
         _isLoading = false;
       });
     } catch (_) {
@@ -172,9 +201,34 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             _NextActionCallout(action: lead.nextAction!, onClear: _clearNextAction),
             const SizedBox(height: 18),
           ],
+          if (lead.retentionStatus != RetentionStatus.active)
+            RetentionBanner(
+              status: lead.retentionStatus,
+              daysOverdue: DateTime.now()
+                  .difference(lead.lastContactedAt ?? lead.createdAt)
+                  .inDays,
+              onExtend: () async {
+                await _leadRepo.updateLead(lead.copyWith(
+                  retentionStatus: RetentionStatus.retentionExtended,
+                  lastContactedAt: DateTime.now(),
+                ));
+                showCompassSnack(context, message: 'Retention extended', type: CompassSnackType.success);
+                await _load();
+              },
+              onDelete: () async {
+                final confirmed = await showDeletionRequestSheet(context, lead.fullName);
+                if (confirmed == true && mounted) {
+                  await _leadRepo.updateLead(lead.copyWith(
+                    retentionStatus: RetentionStatus.markedForDeletion,
+                  ));
+                  showCompassSnack(context, message: 'Deletion requested', type: CompassSnackType.warn);
+                  await _load();
+                }
+              },
+            ),
           _QuickActionGrid(
             onCall: () => _logActivity(ActivityType.call),
-            onWhatsApp: () => _logActivity(ActivityType.whatsApp),
+            onWhatsApp: () => _openWhatsApp(lead.phone),
             onMeet: () => _logActivity(ActivityType.meeting),
             onNote: () => _logActivity(ActivityType.note),
           ),
@@ -188,10 +242,85 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           _Timeline(entries: _timeline),
           const SizedBox(height: 24),
           _DetailsBlock(lead: lead),
+          const SizedBox(height: 12),
+          PrivacyConsentSection(
+            status: lead.consentStatus,
+            records: lead.consentRecords,
+            onRecordConsent: () {
+              showCompassSnack(context, message: 'Consent recorded', type: CompassSnackType.success);
+            },
+            onRevokeConsent: () {
+              showCompassSnack(context, message: 'Consent revoked — lead flagged for deletion', type: CompassSnackType.warn);
+            },
+          ),
+          const SizedBox(height: 12),
+          AuditTrailSection(entries: _auditEntries),
           const SizedBox(height: 96),
         ],
       ),
     );
+  }
+
+  Future<void> _openWhatsApp(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+    final waNum = digits.startsWith('91') ? digits : '91$digits';
+    final uri = Uri.parse('https://wa.me/$waNum');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    // After returning from WhatsApp, prompt to log the activity
+    if (mounted) {
+      _logActivity(ActivityType.whatsApp);
+    }
+  }
+
+  Future<void> _editLead() async {
+    if (_lead == null) return;
+    final updated = await showEditLeadSheet(context, _lead!);
+    if (updated != null && mounted) {
+      await _leadRepo.updateLead(updated);
+      showCompassSnack(context, message: 'Details updated', type: CompassSnackType.success);
+      await _load();
+    }
+  }
+
+  Future<void> _exportData() async {
+    if (_lead == null) return;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user != null) {
+      await _auditRepo.log(
+        userId: user.id,
+        userName: user.name,
+        action: AuditAction.exportData,
+        entityType: 'lead',
+        entityId: _lead!.id,
+      );
+    }
+    if (mounted) await showDataExportSheet(context, _lead!);
+  }
+
+  Future<void> _requestDeletion() async {
+    if (_lead == null) return;
+    final confirmed = await showDeletionRequestSheet(context, _lead!.fullName);
+    if (confirmed == true && mounted) {
+      await _leadRepo.updateLead(_lead!.copyWith(
+        retentionStatus: RetentionStatus.markedForDeletion,
+      ));
+      final user = context.read<AuthCubit>().state.currentUser;
+      if (user != null) {
+        await _auditRepo.log(
+          userId: user.id,
+          userName: user.name,
+          action: AuditAction.deletePII,
+          entityType: 'lead',
+          entityId: _lead!.id,
+        );
+      }
+      if (mounted) {
+        showCompassSnack(context, message: 'Deletion requested', type: CompassSnackType.warn);
+        context.pop();
+      }
+    }
   }
 
   void _onMenuSelected(String value) {
@@ -203,6 +332,15 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           'clientName': lead.fullName,
           'companyName': lead.companyName,
         });
+        break;
+      case 'edit':
+        _editLead();
+        break;
+      case 'export':
+        _exportData();
+        break;
+      case 'delete':
+        _requestDeletion();
         break;
       case 'park':
         _parkOrClose();
@@ -245,6 +383,15 @@ class _LeadHeroHeader extends StatelessWidget {
                 position: PopupMenuPosition.under,
                 itemBuilder: (_) => const [
                   PopupMenuItem(
+                    value: 'edit',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.edit_outlined, size: 20),
+                      title: Text('Edit details'),
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: 'ib',
                     child: ListTile(
                       dense: true,
@@ -254,12 +401,30 @@ class _LeadHeroHeader extends StatelessWidget {
                     ),
                   ),
                   PopupMenuItem(
+                    value: 'export',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.download_outlined, size: 20),
+                      title: Text('Export data'),
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: 'park',
                     child: ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.pause_circle_outline, size: 20),
                       title: Text('Park / Close'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      title: Text('Request deletion'),
                     ),
                   ),
                 ],

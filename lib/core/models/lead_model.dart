@@ -1,8 +1,11 @@
+import '../enums/consent_type.dart';
 import '../enums/lead_stage.dart';
 import '../enums/lead_temperature.dart';
 import '../enums/lead_source.dart';
+import '../enums/retention_status.dart';
 import '../enums/update_type.dart';
 import 'activity_model.dart';
+import 'consent_record.dart';
 import 'deal_info_model.dart';
 import 'next_action_model.dart';
 import 'profiling_model.dart';
@@ -39,6 +42,12 @@ class LeadModel {
   final LeadUpdateStatus? latestStatus;
   final List<String> ibLeadIds;
 
+  // DPDP Act compliance fields
+  final ConsentStatus consentStatus;
+  final List<ConsentRecord> consentRecords;
+  final RetentionStatus retentionStatus;
+  final String? groupName; // family/group linkage for coverage
+
   LeadModel({
     required this.id,
     required this.fullName,
@@ -70,6 +79,10 @@ class LeadModel {
     this.nextAction,
     this.latestStatus,
     this.ibLeadIds = const [],
+    this.consentStatus = ConsentStatus.pending,
+    this.consentRecords = const [],
+    this.retentionStatus = RetentionStatus.active,
+    this.groupName,
   });
 
   LeadTemperature get temperature =>
@@ -154,6 +167,10 @@ class LeadModel {
     bool clearNextAction = false,
     LeadUpdateStatus? latestStatus,
     List<String>? ibLeadIds,
+    ConsentStatus? consentStatus,
+    List<ConsentRecord>? consentRecords,
+    RetentionStatus? retentionStatus,
+    String? groupName,
   }) {
     return LeadModel(
       id: id ?? this.id,
@@ -186,6 +203,10 @@ class LeadModel {
       nextAction: clearNextAction ? null : (nextAction ?? this.nextAction),
       latestStatus: latestStatus ?? this.latestStatus,
       ibLeadIds: ibLeadIds ?? this.ibLeadIds,
+      consentStatus: consentStatus ?? this.consentStatus,
+      consentRecords: consentRecords ?? this.consentRecords,
+      retentionStatus: retentionStatus ?? this.retentionStatus,
+      groupName: groupName ?? this.groupName,
     );
   }
 }

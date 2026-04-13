@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/consent_type.dart';
 import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
+import '../../../../core/models/consent_record.dart';
 import '../../../../core/models/coverage_check_result.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/coverage_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
+import '../../../../routing/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
@@ -46,6 +49,7 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
   bool _saving = false;
   bool _checkingCoverage = false;
   CoverageCheckResult? _coverage;
+  bool _consentGranted = false;
 
   @override
   void initState() {
@@ -131,6 +135,7 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       _phoneController.text.trim().length >= 10 &&
       _source != null &&
       _productSet.isNotEmpty &&
+      _consentGranted &&
       (_coverage?.status != CoverageStatus.existingClient);
 
   Future<void> _save() async {
@@ -141,11 +146,24 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
     setState(() => _saving = true);
     final now = DateTime.now();
+    final leadId = 'LEAD_${now.millisecondsSinceEpoch}';
+    final consentRecord = ConsentRecord(
+      id: 'CON_${now.millisecondsSinceEpoch}',
+      leadId: leadId,
+      consentType: DataConsentType.leadCapture,
+      grantedAt: now,
+      grantedByUserId: user.id,
+      grantedByUserName: user.name,
+      purposeStatement: DataConsentType.leadCapture.purposeStatement,
+    );
     final lead = LeadModel(
-      id: 'LEAD_${now.millisecondsSinceEpoch}',
+      id: leadId,
       fullName: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
       companyName: _companyController.text.trim().isEmpty
+          ? null
+          : _companyController.text.trim(),
+      groupName: _companyController.text.trim().isEmpty
           ? null
           : _companyController.text.trim(),
       source: _source!,
@@ -156,13 +174,15 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       assignedRmName: user.name,
       createdAt: now,
       updatedAt: now,
+      consentStatus: ConsentStatus.granted,
+      consentRecords: [consentRecord],
     );
 
     await getIt<LeadRepository>().createLead(lead);
     if (!mounted) return;
     setState(() => _saving = false);
     showCompassSnack(context, message: 'Lead added', type: CompassSnackType.success);
-    context.pop();
+    context.pushReplacement(RouteNames.leadDetailPath(leadId));
   }
 
   // ── Build ──────────────────────────────────────────────────────────
@@ -264,6 +284,58 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                     ),
                   )
                   .toList(),
+            ),
+            const SizedBox(height: 24),
+
+            // DPDP consent
+            GestureDetector(
+              onTap: () => setState(() => _consentGranted = !_consentGranted),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfacePrimary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _consentGranted
+                        ? AppColors.successGreen.withValues(alpha: 0.5)
+                        : AppColors.borderDefault,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: _consentGranted,
+                      activeColor: AppColors.navyPrimary,
+                      onChanged: (v) => setState(() => _consentGranted = v ?? false),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Data consent (DPDP Act)',
+                            style: AppTextStyles.labelSmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            DataConsentType.leadCapture.purposeStatement,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textHint,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

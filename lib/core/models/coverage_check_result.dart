@@ -1,4 +1,5 @@
 import 'client_master_record.dart';
+import 'family_group_model.dart';
 
 enum CoverageStatus {
   clear,
@@ -20,6 +21,10 @@ class CoverageCheckResult {
   final double? confidence; // 0..1
   final List<ClientMasterRecord> alternateMatches;
 
+  /// Family-level match — populated when the matched record belongs to a
+  /// known family group. Shows all members of the family for full context.
+  final FamilyGroupModel? familyMatch;
+
   CoverageCheckResult({
     required this.status,
     required this.message,
@@ -31,6 +36,7 @@ class CoverageCheckResult {
     this.source,
     this.confidence,
     this.alternateMatches = const [],
+    this.familyMatch,
   });
 
   bool get canProceed => status == CoverageStatus.clear;
@@ -44,6 +50,7 @@ class CoverageCheckResult {
   factory CoverageCheckResult.existingClient(
     ClientMasterRecord record, {
     double confidence = 0.95,
+    FamilyGroupModel? familyMatch,
   }) =>
       CoverageCheckResult(
         status: CoverageStatus.existingClient,
@@ -55,11 +62,13 @@ class CoverageCheckResult {
         existingRmId: record.rmId,
         source: record.source,
         confidence: confidence,
+        familyMatch: familyMatch,
       );
 
   factory CoverageCheckResult.duplicateLead(
     ClientMasterRecord record, {
     double confidence = 0.85,
+    FamilyGroupModel? familyMatch,
   }) =>
       CoverageCheckResult(
         status: CoverageStatus.duplicateLead,
@@ -71,6 +80,7 @@ class CoverageCheckResult {
         existingRmId: record.rmId,
         source: record.source,
         confidence: confidence,
+        familyMatch: familyMatch,
       );
 
   factory CoverageCheckResult.requiresReview(
