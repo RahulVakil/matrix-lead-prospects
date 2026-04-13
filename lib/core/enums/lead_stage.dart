@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
+/// Lead pipeline: Lead → Profiling → Engage → Onboard.
+/// Profiling happens BEFORE engagement — research the prospect first,
+/// then schedule meetings. Onboard = account opened in Wealth Spectrum.
 enum LeadStage {
   lead('Lead', 'S1', AppColors.stageNew, 1),
-  engage('Engage', 'S2', AppColors.stageEngage, 2),
-  opportunity('Opportunity', 'S3', AppColors.stageOpportunity, 3),
-  profiling('Profiling', 'S4', AppColors.stageProfiling, 4),
-  client('Client', 'S5', AppColors.stageClient, 5),
+  profiling('Profiling', 'S2', AppColors.stageProfiling, 2),
+  engage('Engage', 'S3', AppColors.stageEngage, 3),
+  onboard('Onboard', 'S4', AppColors.stageClient, 4),
   parked('Parked', 'P', AppColors.dormantGray, 0),
   lostCompetitor('Lost - Competitor', 'L1', AppColors.errorRed, 0),
   lostNotInterested('Lost - Not Interested', 'L2', AppColors.errorRed, 0),
@@ -21,7 +23,7 @@ enum LeadStage {
   const LeadStage(this.label, this.code, this.color, this.order);
 
   bool get isActive => order > 0;
-  bool get isTerminal => this == client || isLost;
+  bool get isTerminal => this == onboard || isLost;
   bool get isLost =>
       this == lostCompetitor ||
       this == lostNotInterested ||
@@ -30,13 +32,11 @@ enum LeadStage {
   LeadStage? get nextStage {
     switch (this) {
       case lead:
-        return engage;
-      case engage:
-        return opportunity;
-      case opportunity:
         return profiling;
       case profiling:
-        return client;
+        return engage;
+      case engage:
+        return onboard;
       default:
         return null;
     }
@@ -45,13 +45,13 @@ enum LeadStage {
   int get slaDays {
     switch (this) {
       case lead:
-        return 1; // 24 hours
-      case engage:
-        return 7;
-      case opportunity:
-        return 14;
+        return 1; // 24 hours first contact
       case profiling:
-        return 3; // 72 hours for checker
+        return 5; // research window
+      case engage:
+        return 7; // meeting within a week
+      case onboard:
+        return 3; // account opening SLA
       default:
         return 0;
     }
@@ -61,12 +61,15 @@ enum LeadStage {
     switch (this) {
       case lead:
         return 2;
+      case profiling:
+        return 7;
       case engage:
-        return 5;
-      case opportunity:
         return 10;
       default:
         return 0;
     }
   }
+
+  /// Active pipeline stages in order (for dashboard funnel).
+  static const activePipeline = [lead, profiling, engage, onboard];
 }

@@ -139,11 +139,11 @@ class MockDataGenerators {
       }
 
       ProfilingModel? profiling;
-      if (stage == LeadStage.profiling || stage == LeadStage.client) {
+      if (stage == LeadStage.profiling || stage == LeadStage.onboard) {
         profiling = ProfilingModel(
           id: 'PROF${(i + 1).toString().padLeft(4, '0')}',
           leadId: 'LEAD${(i + 1).toString().padLeft(4, '0')}',
-          status: stage == LeadStage.client
+          status: stage == LeadStage.onboard
               ? ProfilingStatus.approved
               : ProfilingStatus.values[rng.nextInt(3) + 2],
           submittedAt: now.subtract(Duration(days: rng.nextInt(10))),
@@ -359,9 +359,9 @@ class MockDataGenerators {
     final roll = (seed * 17 + rng.nextInt(10)) % 100;
     if (roll < 25) return LeadStage.lead;
     if (roll < 55) return LeadStage.engage;
-    if (roll < 75) return LeadStage.opportunity;
+    if (roll < 75) return LeadStage.engage;
     if (roll < 90) return LeadStage.profiling;
-    if (roll < 95) return LeadStage.client;
+    if (roll < 95) return LeadStage.onboard;
     if (roll < 97) return LeadStage.parked;
     return LeadStage.dormant;
   }

@@ -400,7 +400,7 @@ class MockLeadRepository implements LeadRepository {
     await Future.delayed(const Duration(milliseconds: 200));
     final myLeads = _leads.where((l) => l.assignedRmId == rmId && l.stage.isActive);
     final summary = <LeadStage, int>{};
-    for (final stage in [LeadStage.lead, LeadStage.engage, LeadStage.opportunity, LeadStage.profiling, LeadStage.client]) {
+    for (final stage in LeadStage.activePipeline) {
       summary[stage] = myLeads.where((l) => l.stage == stage).length;
     }
     return summary;

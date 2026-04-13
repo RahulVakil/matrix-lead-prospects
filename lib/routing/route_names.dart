@@ -9,6 +9,7 @@ class RouteNames {
   static const String more = '/more';
 
   // Lead routes
+  static const String leadsDashboard = '/leads-dashboard';
   static const String leads = '/leads';
   static const String getLead = '/get-lead';
   static const String leadDetail = '/leads/:leadId';

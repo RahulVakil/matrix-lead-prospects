@@ -53,7 +53,8 @@ class _StageAdvanceSheetState extends State<StageAdvanceSheet> {
     final lead = widget.lead;
     if (lead == null) return const [];
     switch (next) {
-      case LeadStage.engage:
+      case LeadStage.profiling:
+        // Lead → Profiling: need at least one logged activity
         return [
           _Check(
             label: 'At least one logged activity (call/meeting)',
@@ -61,35 +62,33 @@ class _StageAdvanceSheetState extends State<StageAdvanceSheet> {
                 .any((a) => !a.isSystemGenerated),
           ),
         ];
-      case LeadStage.opportunity:
+      case LeadStage.engage:
+        // Profiling → Engage: need profiling research done + AUM estimate
         return [
           _Check(
-            label: 'A connected or interested outcome on file',
-            passed: lead.recentActivities.any((a) =>
-                a.outcome != null &&
-                (a.outcome!.label == 'Connected' ||
-                    a.outcome!.label == 'Interested')),
+            label: 'Profiling research completed',
+            passed: lead.profiling != null ||
+                lead.recentActivities.length > 2,
           ),
           _Check(
             label: 'AUM estimate captured',
             passed: lead.estimatedAum != null,
           ),
         ];
-      case LeadStage.profiling:
+      case LeadStage.onboard:
+        // Engage → Onboard: need a meeting logged + interested outcome
         return [
           _Check(
-            label: 'Deal info filled (AUM + products + probability)',
-            passed: lead.dealInfo != null &&
-                lead.dealInfo!.products.isNotEmpty &&
-                lead.dealInfo!.aumEstimate > 0,
+            label: 'At least one meeting logged',
+            passed: lead.recentActivities.any((a) =>
+                a.type.label == 'Meeting'),
           ),
-        ];
-      case LeadStage.client:
-        return [
           _Check(
-            label: 'Profiling approved by checker',
-            passed: lead.profiling != null &&
-                lead.profiling!.status.label.toLowerCase() == 'approved',
+            label: 'An interested or connected outcome',
+            passed: lead.recentActivities.any((a) =>
+                a.outcome != null &&
+                (a.outcome!.label == 'Connected' ||
+                    a.outcome!.label == 'Interested')),
           ),
         ];
       default:
@@ -221,14 +220,12 @@ class _StageAdvanceSheetState extends State<StageAdvanceSheet> {
 
   String _guidance(LeadStage next) {
     switch (next) {
-      case LeadStage.engage:
-        return "Engage means you've made meaningful first contact.";
-      case LeadStage.opportunity:
-        return 'Opportunity: prospect has confirmed interest and AUM range.';
       case LeadStage.profiling:
-        return "Profiling: complete the profiling form for compliance review.";
-      case LeadStage.client:
-        return 'Convert to client: profiling must be approved and KYC complete.';
+        return 'Research the prospect — profile their needs and prepare talking points.';
+      case LeadStage.engage:
+        return 'Schedule meetings and calls now that you understand the prospect.';
+      case LeadStage.onboard:
+        return 'Initiate account opening. This triggers the approval workflow.';
       default:
         return 'Confirm the stage change below.';
     }

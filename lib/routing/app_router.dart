@@ -18,6 +18,7 @@ import '../features/dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_checker_queue_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_capture_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_detail_screen.dart';
+import '../features/leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
 import '../features/notifications/presentation/pages/notifications_screen.dart';
 
 GoRouter createRouter(AuthCubit authCubit) {
@@ -39,6 +40,12 @@ GoRouter createRouter(AuthCubit authCubit) {
       GoRoute(
         path: '/home',
         pageBuilder: (context, state) => _fadePage(const AppShell()),
+      ),
+
+      // Leads Dashboard — module landing page
+      GoRoute(
+        path: '/leads-dashboard',
+        pageBuilder: (context, state) => _fadePage(const LeadsDashboardScreen()),
       ),
 
       // Lead module routes

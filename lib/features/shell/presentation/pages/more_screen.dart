@@ -7,7 +7,6 @@ import '../../../../core/enums/user_role.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
-import '../../cubit/shell_cubit.dart';
 
 /// More tab — deliberately minimal.
 /// Single Leads entry → Leads landing hub. Switch role + logout.
@@ -33,8 +32,8 @@ class MoreScreen extends StatelessWidget {
                 icon: Icons.people_alt_outlined,
                 accent: AppColors.navyPrimary,
                 title: 'Leads',
-                trailing: 'Open',
-                onTap: () => context.read<ShellCubit>().updateIndex(0),
+                trailing: 'Pipeline, capture',
+                onTap: () => context.push('/leads-dashboard'),
               ),
               _MoreRow(
                 icon: Icons.notifications_outlined,

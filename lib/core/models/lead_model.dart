@@ -1,4 +1,5 @@
 import '../enums/consent_type.dart';
+import '../enums/lead_entity_type.dart';
 import '../enums/lead_stage.dart';
 import '../enums/lead_temperature.dart';
 import '../enums/lead_source.dart';
@@ -12,10 +13,19 @@ import 'profiling_model.dart';
 
 class LeadModel {
   final String id;
-  final String fullName;
+  final LeadEntityType entityType;
+  final LeadSubType? subType;
+  final String fullName; // computed for Individual, direct for Non-Individual
+  final String? firstName;
+  final String? middleName;
+  final String? lastName;
   final String phone;
   final String? email;
   final String? companyName;
+  final bool hasRequestedConnect;
+  final String? connectRepName;
+  final String? connectRepPhone;
+  final String? connectRepEmail;
   final String? city;
   final LeadSource source;
   final String? referredBy;
@@ -50,10 +60,19 @@ class LeadModel {
 
   LeadModel({
     required this.id,
+    this.entityType = LeadEntityType.individual,
+    this.subType,
     required this.fullName,
+    this.firstName,
+    this.middleName,
+    this.lastName,
     required this.phone,
     this.email,
     this.companyName,
+    this.hasRequestedConnect = false,
+    this.connectRepName,
+    this.connectRepPhone,
+    this.connectRepEmail,
     this.city,
     required this.source,
     this.referredBy,
@@ -137,10 +156,19 @@ class LeadModel {
 
   LeadModel copyWith({
     String? id,
+    LeadEntityType? entityType,
+    LeadSubType? subType,
     String? fullName,
+    String? firstName,
+    String? middleName,
+    String? lastName,
     String? phone,
     String? email,
     String? companyName,
+    bool? hasRequestedConnect,
+    String? connectRepName,
+    String? connectRepPhone,
+    String? connectRepEmail,
     String? city,
     LeadSource? source,
     String? referredBy,
@@ -174,10 +202,19 @@ class LeadModel {
   }) {
     return LeadModel(
       id: id ?? this.id,
+      entityType: entityType ?? this.entityType,
+      subType: subType ?? this.subType,
       fullName: fullName ?? this.fullName,
+      firstName: firstName ?? this.firstName,
+      middleName: middleName ?? this.middleName,
+      lastName: lastName ?? this.lastName,
       phone: phone ?? this.phone,
       email: email ?? this.email,
       companyName: companyName ?? this.companyName,
+      hasRequestedConnect: hasRequestedConnect ?? this.hasRequestedConnect,
+      connectRepName: connectRepName ?? this.connectRepName,
+      connectRepPhone: connectRepPhone ?? this.connectRepPhone,
+      connectRepEmail: connectRepEmail ?? this.connectRepEmail,
       city: city ?? this.city,
       source: source ?? this.source,
       referredBy: referredBy ?? this.referredBy,
