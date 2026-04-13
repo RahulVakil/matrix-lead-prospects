@@ -59,7 +59,7 @@ class AppShell extends StatelessWidget {
       case UserRole.teamLead:
         return const [
           TlDashboardScreen(),
-          LeadsDashboardScreen(),
+          ClientListScreen(showAll: true),
           _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
           MoreScreen(),
         ];
@@ -70,9 +70,7 @@ class AppShell extends StatelessWidget {
           MoreScreen(),
           MoreScreen(), // placeholder to keep 4 tabs
         ];
-      case UserRole.checker:
       case UserRole.admin:
-      case UserRole.branchManager:
         return const [
           LeadsDashboardScreen(),
           ClientListScreen(),

@@ -190,7 +190,7 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           ? null
           : _BottomActionBar(
               nextStageLabel: nextStage?.label,
-              onPark: _parkOrClose,
+              onDrop: _dropLead,
               onAdvance: nextStage != null ? _advanceStage : null,
             ),
       body: ListView(
@@ -233,7 +233,15 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             onMeet: () => _logActivity(ActivityType.meeting),
             onNote: () => _logActivity(ActivityType.note),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // Prominent IB convert CTA
+          if (lead.ibLeadIds.isEmpty)
+            _IbConvertCard(onTap: () => _onMenuSelected('ib'))
+          else
+            _IbConvertedInfo(ibLeadId: lead.ibLeadIds.first),
+          const SizedBox(height: 16),
+
           if (lead.dealInfo != null) ...[
             _DealStrip(lead: lead),
             const SizedBox(height: 24),
@@ -346,15 +354,17 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     );
   }
 
-  void _onMenuSelected(String value) {
+  void _onMenuSelected(String value) async {
     final lead = _lead;
     if (lead == null) return;
     switch (value) {
       case 'ib':
-        context.push('/ib-leads/new', extra: {
+        await context.push('/ib-leads/new', extra: {
           'clientName': lead.fullName,
           'companyName': lead.companyName,
+          'parentLeadId': lead.id,
         });
+        if (mounted) await _load();
         break;
       case 'edit':
         _editLead();
@@ -427,39 +437,12 @@ class _LeadHeroHeader extends StatelessWidget {
                     ),
                   ),
                   PopupMenuItem(
-                    value: 'export',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.download_outlined, size: 20),
-                      title: Text('Export data'),
-                    ),
-                  ),
-                  PopupMenuItem(
                     value: 'drop',
                     child: ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.remove_circle_outline, size: 20, color: Colors.orange),
                       title: Text('Drop lead'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'park',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.pause_circle_outline, size: 20),
-                      title: Text('Park / Close'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                      title: Text('Request deletion'),
                     ),
                   ),
                 ],
@@ -507,6 +490,20 @@ class _LeadHeroHeader extends StatelessWidget {
                             color: lead.stage.color,
                             label: lead.stage.label,
                           ),
+                          if (lead.ibLeadIds.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'IB',
+                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -1177,7 +1174,7 @@ class _DetailsBlock extends StatefulWidget {
 
 class _DetailsBlockState extends State<_DetailsBlock>
     with SingleTickerProviderStateMixin {
-  bool _open = false;
+  bool _open = true;
 
   @override
   Widget build(BuildContext context) {
@@ -1277,12 +1274,12 @@ class _DetailsBlockState extends State<_DetailsBlock>
 
 class _BottomActionBar extends StatelessWidget {
   final String? nextStageLabel;
-  final VoidCallback onPark;
+  final VoidCallback onDrop;
   final VoidCallback? onAdvance;
 
   const _BottomActionBar({
     required this.nextStageLabel,
-    required this.onPark,
+    required this.onDrop,
     required this.onAdvance,
   });
 
@@ -1307,12 +1304,12 @@ class _BottomActionBar extends StatelessWidget {
         child: Row(
           children: [
             TextButton(
-              onPressed: onPark,
+              onPressed: onDrop,
               style: TextButton.styleFrom(
-                foregroundColor: AppColors.textSecondary,
+                foregroundColor: AppColors.errorRed,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               ),
-              child: const Text('Park / Close'),
+              child: const Text('Drop lead'),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1325,6 +1322,99 @@ class _BottomActionBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Prominent IB convert CTA
+// ────────────────────────────────────────────────────────────────────
+
+class _IbConvertCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _IbConvertCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfacePrimary,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.navyPrimary.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.navyPrimary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.business_center_outlined, color: AppColors.navyPrimary, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Convert to IB lead',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: AppColors.navyPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Create an Investment Banking opportunity',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.navyPrimary, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IbConvertedInfo extends StatelessWidget {
+  final String ibLeadId;
+  const _IbConvertedInfo({required this.ibLeadId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.successGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.successGreen.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: AppColors.successGreen, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Converted to IB lead · $ibLeadId',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.successGreen,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

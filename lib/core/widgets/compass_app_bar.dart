@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 
+/// Lightweight AppBar matching compass design. Used by screens that still
+/// use Scaffold(appBar:) pattern instead of HeroScaffold.
 class CompassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final String? subtitle;
   final List<Widget>? actions;
-  final Widget? leading;
-  final bool showBack;
-  final VoidCallback? onBack;
   final PreferredSizeWidget? bottom;
 
   const CompassAppBar({
@@ -17,9 +15,6 @@ class CompassAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.subtitle,
     this.actions,
-    this.leading,
-    this.showBack = true,
-    this.onBack,
     this.bottom,
   });
 
@@ -33,42 +28,18 @@ class CompassAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: AppColors.navyPrimary,
       foregroundColor: AppColors.textOnDark,
       elevation: 0,
-      systemOverlayStyle: const SystemUiOverlayStyle(
-        statusBarColor: AppColors.navyDark,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-      leading: leading ??
-          (showBack && Navigator.of(context).canPop()
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back, size: 22),
-                  onPressed: onBack ?? () => Navigator.of(context).pop(),
-                )
-              : null),
       title: subtitle == null
-          ? Text(
-              title,
-              style: AppTextStyles.heading3.copyWith(color: AppColors.textOnDark),
-            )
+          ? Text(title, style: AppTextStyles.heading3.copyWith(color: Colors.white))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  style: AppTextStyles.heading3.copyWith(color: AppColors.textOnDark),
-                ),
-                Text(
-                  subtitle!,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textOnDark.withValues(alpha: 0.7),
-                  ),
-                ),
+                Text(title, style: AppTextStyles.heading3.copyWith(color: Colors.white)),
+                Text(subtitle!, style: AppTextStyles.caption.copyWith(color: Colors.white70)),
               ],
             ),
       actions: actions,
       bottom: bottom,
-      iconTheme: const IconThemeData(color: AppColors.textOnDark),
     );
   }
 }

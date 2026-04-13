@@ -38,7 +38,7 @@ class MoreScreen extends StatelessWidget {
         return [
           _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
           _GridTile(icon: Icons.person_add_alt_1, label: 'New lead', onTap: () => context.push('/leads/new')),
-          _GridTile(icon: Icons.business_center_outlined, label: 'IB lead', onTap: () => context.push('/ib-leads/new')),
+          _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
           _GridTile(icon: Icons.move_to_inbox_outlined, label: 'Get lead', onTap: () => context.push('/get-lead')),
           _GridTile(icon: Icons.notifications_outlined, label: 'Notifications', onTap: () => context.push('/notifications')),
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
@@ -48,21 +48,14 @@ class MoreScreen extends StatelessWidget {
           _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
           _GridTile(icon: Icons.person_add_alt_1, label: 'New lead', onTap: () => context.push('/leads/new')),
           _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
-        ];
-      case UserRole.checker:
-        return [
-          _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.verified_user_outlined, label: 'Profiling pool', onTap: () => context.push('/profiling/queue')),
-          _GridTile(icon: Icons.inventory_outlined, label: 'Manage pool', onTap: () => context.push('/admin/manage-pool')),
+          _GridTile(icon: Icons.fact_check_outlined, label: 'IB status', onTap: () => context.push('/ib-leads')),
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
         ];
       case UserRole.admin:
         return [
           _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.verified_user_outlined, label: 'Profiling pool', onTap: () => context.push('/profiling/queue')),
           _GridTile(icon: Icons.inventory_outlined, label: 'Manage pool', onTap: () => context.push('/admin/manage-pool')),
-          _GridTile(icon: Icons.dashboard_outlined, label: 'Lead dashboard', onTap: () => context.push('/leads-dashboard')),
+          _GridTile(icon: Icons.dashboard_outlined, label: 'Lead dashboard', onTap: () => context.push('/tl/dashboard')),
           _GridTile(icon: Icons.fact_check_outlined, label: 'IB approvals', onTap: () => context.push('/ib-leads')),
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
         ];
@@ -91,7 +84,7 @@ class MoreScreen extends StatelessWidget {
         children: [
           Text('Demo — see how the app changes per role.', style: AppTextStyles.bodySmall),
           const SizedBox(height: 14),
-          ...[UserRole.rm, UserRole.teamLead, UserRole.branchManager, UserRole.checker, UserRole.admin, UserRole.ib]
+          ...[UserRole.rm, UserRole.teamLead, UserRole.admin, UserRole.ib]
               .map((role) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
@@ -113,8 +106,6 @@ class MoreScreen extends StatelessWidget {
   IconData _iconForRole(UserRole role) => switch (role) {
         UserRole.rm => Icons.person_outline,
         UserRole.teamLead => Icons.groups_outlined,
-        UserRole.branchManager => Icons.fact_check_outlined,
-        UserRole.checker => Icons.verified_user_outlined,
         UserRole.admin => Icons.admin_panel_settings_outlined,
         UserRole.ib => Icons.business_center_outlined,
         _ => Icons.person_outline,

@@ -245,7 +245,11 @@ class _AssignTab extends StatelessWidget {
                               children: [
                                 Text('Assign to RM', style: AppTextStyles.heading3.copyWith(fontWeight: FontWeight.w700)),
                                 const SizedBox(height: 14),
-                                ...rms.map((rm) => ListTile(
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    children: rms.map((rm) => ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       leading: CircleAvatar(
                                         radius: 18,
@@ -258,7 +262,9 @@ class _AssignTab extends StatelessWidget {
                                         Navigator.pop(context);
                                         onAssign(lead, rm.id, rm.name);
                                       },
-                                    )),
+                                    )).toList(),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

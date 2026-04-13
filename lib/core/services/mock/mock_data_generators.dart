@@ -75,19 +75,9 @@ class MockDataGenerators {
     branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'Team Lead',
   );
 
-  static UserModel get checker => UserModel(
-    id: 'CHK001', name: 'Sunita Desai', empCode: 'CHK001', role: UserRole.checker,
-    branchName: 'Mumbai HQ', designation: 'Sr. Compliance Officer',
-  );
-
   static UserModel get admin => UserModel(
     id: 'ADM001', name: 'Ramesh Gupta', empCode: 'ADM001', role: UserRole.admin,
     branchName: 'Mumbai HQ', designation: 'MIS Admin',
-  );
-
-  static UserModel get branchHead => UserModel(
-    id: 'BH001', name: 'Anjali Bhatia', empCode: 'BH001', role: UserRole.branchManager,
-    branchName: 'Mumbai HQ', designation: 'Branch Head',
   );
 
   static UserModel get ibUser => UserModel(
@@ -199,6 +189,10 @@ class MockDataGenerators {
         profiling: profiling,
         recentActivities: activities,
         nextAction: nextAction,
+        ibLeadIds: firstName == 'Rajesh' ? const ['IBL0001']
+            : firstName == 'Vikram' ? const ['IBL0002']
+            : firstName == 'Kavita' ? const ['IBL0004']
+            : const [],
         dropReason: stage == LeadStage.dropped
             ? DropReason.values[seed % DropReason.values.length]
             : null,
@@ -366,6 +360,7 @@ class MockDataGenerators {
         assignedRmId: rm.id,
         assignedRmName: rm.name,
         isDirect: i % 4 != 0,
+        hasIbLead: i % 5 == 0,
         onboardedAt: now.subtract(Duration(days: rng.nextInt(720) + 30)),
       ));
     }

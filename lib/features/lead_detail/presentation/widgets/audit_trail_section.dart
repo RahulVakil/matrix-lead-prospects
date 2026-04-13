@@ -14,7 +14,7 @@ class AuditTrailSection extends StatefulWidget {
 }
 
 class _AuditTrailSectionState extends State<AuditTrailSection> {
-  bool _open = false;
+  bool _open = true;
 
   @override
   Widget build(BuildContext context) {

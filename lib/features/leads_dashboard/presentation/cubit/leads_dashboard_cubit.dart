@@ -1,9 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/ib_deal_type.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/enums/lead_temperature.dart';
+import '../../../../core/models/ib_lead_model.dart';
 import '../../../../core/models/lead_model.dart';
+import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
 
 class ActionTodayItem extends Equatable {
@@ -25,6 +28,7 @@ class LeadsDashboardState extends Equatable {
   final int droppedCount;
   final List<ActionTodayItem> actionToday;
   final Map<LeadStage, int> pipeline;
+  final List<IbLeadModel> ibSentBack;
   final String? error;
 
   const LeadsDashboardState({
@@ -36,6 +40,7 @@ class LeadsDashboardState extends Equatable {
     this.droppedCount = 0,
     this.actionToday = const [],
     this.pipeline = const {},
+    this.ibSentBack = const [],
     this.error,
   });
 
@@ -53,7 +58,7 @@ class LeadsDashboardState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, droppedCount, actionToday.length, pipeline, error];
+  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, droppedCount, actionToday.length, pipeline, ibSentBack.length, error];
 }
 
 class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
@@ -131,6 +136,14 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
 
       final droppedC = allLeads.where((l) => l.stage == LeadStage.dropped).length;
 
+      // IB sent-back leads for this RM
+      List<IbLeadModel> ibSentBack = [];
+      try {
+        final ibRepo = getIt<IbLeadRepository>();
+        final myIb = await ibRepo.getMyLeads(rmId);
+        ibSentBack = myIb.where((l) => l.status == IbLeadStatus.sentBack).toList();
+      } catch (_) {}
+
       emit(LeadsDashboardState(
         isLoading: false,
         totalLeads: allLeads.where((l) => l.stage.isActive).length,
@@ -140,6 +153,7 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
         droppedCount: droppedC,
         actionToday: actions,
         pipeline: pipeline,
+        ibSentBack: ibSentBack,
       ));
     } catch (e) {
       emit(LeadsDashboardState(isLoading: false, error: e.toString()));

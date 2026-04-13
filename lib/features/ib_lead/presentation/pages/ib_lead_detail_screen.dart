@@ -135,7 +135,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
 
     final user = context.watch<AuthCubit>().state.currentUser;
     final isBranchHead =
-        user?.role == UserRole.branchManager || user?.role == UserRole.admin;
+        user?.role == UserRole.admin || user?.role == UserRole.ib;
     final isPending = _lead!.status == IbLeadStatus.pending;
     final canDecide = isBranchHead && isPending;
 

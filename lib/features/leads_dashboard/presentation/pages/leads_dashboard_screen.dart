@@ -97,6 +97,71 @@ class LeadsDashboardScreen extends StatelessWidget {
                             ),
                           ),
                         ],
+
+                        // IB sent-back section
+                        if (state.ibSentBack.isNotEmpty) ...[
+                          const SizedBox(height: 22),
+                          _SectionTitle('IB leads sent back', count: state.ibSentBack.length),
+                          const SizedBox(height: 12),
+                          ...state.ibSentBack.map((ib) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Material(
+                                  color: AppColors.surfacePrimary,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: InkWell(
+                                    onTap: () => context.push(RouteNames.ibLeadDetailPath(ib.id)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppColors.warmAmber.withValues(alpha: 0.3)),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.replay, size: 16, color: AppColors.warmAmber),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(ib.companyName, style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.w700)),
+                                              ),
+                                              Text(ib.dealType.label, style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+                                            ],
+                                          ),
+                                          if (ib.remarks != null && ib.remarks!.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            Container(
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.warmAmber.withValues(alpha: 0.06),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Icon(Icons.comment_outlined, size: 14, color: AppColors.warmAmber),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      ib.remarks!,
+                                                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary),
+                                                      maxLines: 3,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )),
+                        ],
                       ],
                     ),
                   ),

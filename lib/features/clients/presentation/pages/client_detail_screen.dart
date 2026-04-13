@@ -128,12 +128,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                     },
                   ),
                 ),
-                const SizedBox(height: 10),
-                CompassButton.secondary(
-                  label: 'Run Coverage Check',
-                  icon: Icons.shield_outlined,
-                  onPressed: () => context.push('/coverage'),
-                ),
               ],
             ),
           ),

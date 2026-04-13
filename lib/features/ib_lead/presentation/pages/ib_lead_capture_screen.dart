@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/di/injection.dart';
 import '../../../../core/enums/ib_deal_type.dart';
 import '../../../../core/models/coverage_check_result.dart';
+import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
@@ -25,12 +27,14 @@ class IbLeadCaptureScreen extends StatelessWidget {
   final String? clientName;
   final String? clientCode;
   final String? companyName;
+  final String? parentLeadId;
 
   const IbLeadCaptureScreen({
     super.key,
     this.clientName,
     this.clientCode,
     this.companyName,
+    this.parentLeadId,
   });
 
   @override
@@ -46,13 +50,14 @@ class IbLeadCaptureScreen extends StatelessWidget {
       companyName: companyName,
     );
 
-    return _CaptureBody(seed: seed);
+    return _CaptureBody(seed: seed, parentLeadId: parentLeadId);
   }
 }
 
 class _CaptureBody extends ConsumerWidget {
   final IbLeadFormSeed seed;
-  const _CaptureBody({required this.seed});
+  final String? parentLeadId;
+  const _CaptureBody({required this.seed, this.parentLeadId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -96,6 +101,16 @@ class _CaptureBody extends ConsumerWidget {
                       ? () async {
                           final saved = await notifier.submit();
                           if (saved != null && context.mounted) {
+                            // Update parent lead's ibLeadIds if converting from a wealth lead
+                            if (parentLeadId != null) {
+                              try {
+                                final repo = getIt<LeadRepository>();
+                                final parent = await repo.getLeadById(parentLeadId!);
+                                await repo.updateLead(parent.copyWith(
+                                  ibLeadIds: [...parent.ibLeadIds, saved.id],
+                                ));
+                              } catch (_) {}
+                            }
                             showCompassSnack(
                               context,
                               message: 'Sent to Branch Head for review',

@@ -7,13 +7,8 @@ import '../features/lead_inbox/presentation/pages/lead_inbox_screen.dart';
 import '../features/lead_detail/presentation/pages/lead_detail_screen.dart';
 import '../features/create_lead/presentation/pages/create_lead_screen.dart';
 import '../features/get_lead/presentation/pages/get_lead_screen.dart';
-import '../features/profiling/presentation/pages/profiling_start_screen.dart';
 import '../features/profiling/presentation/pages/checker_queue_screen.dart';
-import '../features/admin/presentation/pages/assignment_screen.dart';
-import '../features/admin/presentation/pages/dropped_leads_screen.dart';
 import '../features/admin/presentation/pages/manage_pool_screen.dart';
-import '../features/admin/presentation/pages/pool_management_screen.dart';
-import '../features/admin/presentation/pages/request_log_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
 import '../features/coverage/presentation/pages/coverage_check_screen.dart';
 import '../features/dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
@@ -91,31 +86,13 @@ GoRouter createRouter(AuthCubit authCubit) {
         },
       ),
 
-      // Profiling routes (legacy)
-      GoRoute(
-        path: '/profiling/:leadId/start',
-        pageBuilder: (context, state) => _fadePage(
-          ProfilingStartScreen(leadId: state.pathParameters['leadId']!),
-        ),
-      ),
+      // Profiling
       GoRoute(
         path: '/profiling/queue',
         pageBuilder: (context, state) => _fadePage(const CheckerQueueScreen()),
       ),
 
-      // Admin routes
-      GoRoute(
-        path: '/admin/leads',
-        pageBuilder: (context, state) => _fadePage(const AssignmentScreen()),
-      ),
-      GoRoute(
-        path: '/admin/pool',
-        pageBuilder: (context, state) => _fadePage(const PoolManagementScreen()),
-      ),
-      GoRoute(
-        path: '/admin/dropped',
-        pageBuilder: (context, state) => _fadePage(const DroppedLeadsScreen()),
-      ),
+      // Admin — unified Manage Pool
       GoRoute(
         path: '/admin/manage-pool',
         pageBuilder: (context, state) => _fadePage(const ManagePoolScreen()),
@@ -126,11 +103,6 @@ GoRouter createRouter(AuthCubit authCubit) {
         path: '/tl/dashboard',
         pageBuilder: (context, state) => _fadePage(const TlDashboardScreen()),
       ),
-      GoRoute(
-        path: '/tl/requests',
-        pageBuilder: (context, state) => _fadePage(const RequestLogScreen()),
-      ),
-
       // Phase 1 — Coverage, Clients, Notifications, IB Lead
       GoRoute(
         path: '/coverage',
@@ -159,6 +131,7 @@ GoRouter createRouter(AuthCubit authCubit) {
               clientName: extra?['clientName'] as String?,
               clientCode: extra?['clientCode'] as String?,
               companyName: extra?['companyName'] as String?,
+              parentLeadId: extra?['parentLeadId'] as String?,
             ),
           );
         },

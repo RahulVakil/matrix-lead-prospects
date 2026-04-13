@@ -191,6 +191,7 @@ class _InboxBodyState extends State<_InboxBody> {
                                   extra: {
                                     'clientName': state.leads[i].fullName,
                                     'companyName': state.leads[i].companyName,
+                                    'parentLeadId': state.leads[i].id,
                                   },
                                 ),
                               ),

@@ -13,6 +13,7 @@ class ClientModel {
   final String assignedRmId;
   final String assignedRmName;
   final bool isDirect; // direct relationship vs. via reportee
+  final bool hasIbLead; // whether this client has an IB lead conversion
   final DateTime onboardedAt;
 
   const ClientModel({
@@ -27,6 +28,7 @@ class ClientModel {
     this.products = const [],
     required this.assignedRmId,
     required this.assignedRmName,
+    this.hasIbLead = false,
     this.isDirect = true,
     required this.onboardedAt,
   });

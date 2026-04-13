@@ -26,12 +26,6 @@ class AuthCubit extends Cubit<AuthState> {
       case UserRole.teamLead:
         user = MockDataGenerators.teamLead;
         break;
-      case UserRole.branchManager:
-        user = MockDataGenerators.branchHead;
-        break;
-      case UserRole.checker:
-        user = MockDataGenerators.checker;
-        break;
       case UserRole.admin:
         user = MockDataGenerators.admin;
         break;

@@ -14,13 +14,14 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../cubit/clients_cubit.dart';
 
 class ClientListScreen extends StatelessWidget {
-  const ClientListScreen({super.key});
+  final bool showAll;
+  const ClientListScreen({super.key, this.showAll = false});
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthCubit>().state.currentUser;
     return BlocProvider(
-      create: (_) => ClientsCubit(rmId: user?.id)..load(),
+      create: (_) => ClientsCubit(rmId: showAll ? null : user?.id)..load(),
       child: const _Body(),
     );
   }
@@ -121,7 +122,22 @@ class _ClientCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(client.fullName, style: AppTextStyles.labelLarge),
+                  Row(
+                    children: [
+                      Expanded(child: Text(client.fullName, style: AppTextStyles.labelLarge, overflow: TextOverflow.ellipsis)),
+                      if (client.hasIbLead) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.navyPrimary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('IB', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     '${client.clientCode} · ${client.aumDisplay}',

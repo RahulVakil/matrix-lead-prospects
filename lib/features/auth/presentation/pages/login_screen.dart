@@ -53,8 +53,6 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _roleButton(context, UserRole.teamLead, 'Team Lead', Icons.group),
               const SizedBox(height: 12),
-              _roleButton(context, UserRole.checker, 'Checker', Icons.verified_user),
-              const SizedBox(height: 12),
               _roleButton(context, UserRole.admin, 'Admin / MIS', Icons.admin_panel_settings),
               const SizedBox(height: 12),
               _roleButton(context, UserRole.ib, 'Investment Banking', Icons.business_center),

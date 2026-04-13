@@ -24,7 +24,7 @@ class PrivacyConsentSection extends StatefulWidget {
 }
 
 class _PrivacyConsentSectionState extends State<PrivacyConsentSection> {
-  bool _open = false;
+  bool _open = true;
 
   Color get _statusColor => switch (widget.status) {
         ConsentStatus.granted => AppColors.successGreen,
