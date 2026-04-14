@@ -80,8 +80,10 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
 
   void setDealStage(IbDealStage? v) => state = state.copyWith(dealStage: v);
 
-  void setTimeline(int month, int year) =>
-      state = state.copyWith(timelineMonth: month, timelineYear: year);
+  void setTimelineMonths(int? months) => state = state.copyWith(
+        timelineMonths: months,
+        clearTimelineMonths: months == null,
+      );
 
   void toggleIdentifiedHow(IbIdentifiedHow h) {
     final next = [...state.identifiedHow];
@@ -128,9 +130,8 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
             : null,
         dealValue: state.dealValue,
         dealValueRange: state.dealValueRange ?? IbDealValueRange.upTo10Cr,
-        dealStage: state.dealStage!,
-        timelineMonth: state.timelineMonth,
-        timelineYear: state.timelineYear,
+        dealStage: state.dealStage,
+        timelineMonths: state.timelineMonths,
         identifiedHow: state.identifiedHow,
         notes: state.notes.trim().isEmpty ? null : state.notes.trim(),
         isConfidential: state.isConfidential,

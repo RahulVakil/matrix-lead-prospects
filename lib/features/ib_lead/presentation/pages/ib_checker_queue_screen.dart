@@ -151,7 +151,7 @@ class _IbLeadCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${lead.dealType.label}  ·  ${lead.dealValueRange.label}  ·  ${lead.dealStage.label}',
+              '${lead.dealType.label}  ·  ${lead.dealValueRange.label}  ·  ${lead.dealStage?.label ?? "—"}',
               style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 4),

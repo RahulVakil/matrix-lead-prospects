@@ -7,6 +7,8 @@ import '../../../../core/models/ib_lead_model.dart';
 import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/inr_formatter.dart';
+import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_empty_state.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
@@ -22,11 +24,96 @@ class IbDashboardScreen extends StatefulWidget {
   State<IbDashboardScreen> createState() => _IbDashboardScreenState();
 }
 
+enum _IbSortKey {
+  dealSizeDesc('Deal size \u2193'),
+  dealSizeAsc('Deal size \u2191'),
+  dateNewest('Newest first'),
+  dateOldest('Oldest first');
+
+  final String label;
+  const _IbSortKey(this.label);
+}
+
+enum _TimelineBucket {
+  now('Now', 0, 0),
+  upTo6M('Up to 6M', 1, 6),
+  sixTo12M('6 – 12M', 7, 12),
+  overOneYear('1 Year +', 13, 999);
+
+  final String label;
+  final int minMonths;
+  final int maxMonths;
+  const _TimelineBucket(this.label, this.minMonths, this.maxMonths);
+
+  bool contains(int months) => months >= minMonths && months <= maxMonths;
+}
+
 class _IbDashboardScreenState extends State<IbDashboardScreen> {
   final _repo = getIt<IbLeadRepository>();
   bool _loading = true;
   List<IbLeadModel> _pending = [];
   List<IbLeadModel> _all = [];
+
+  _IbSortKey _sortKey = _IbSortKey.dateNewest;
+  final Set<IbDealType> _filterTypes = {};
+  final Set<IbDealStage> _filterStages = {};
+  final Set<IbDealValueRange> _filterSizes = {};
+  final Set<_TimelineBucket> _filterTimelines = {};
+  bool _filtersExpanded = false;
+
+  double _sizeOf(IbLeadModel l) =>
+      l.dealValue ?? (l.dealValueRange.minValue + l.dealValueRange.maxValue) / 2;
+
+  List<IbLeadModel> _applyFiltersAndSort(List<IbLeadModel> input) {
+    var list = input.where((l) {
+      if (_filterTypes.isNotEmpty && !_filterTypes.contains(l.dealType)) {
+        return false;
+      }
+      if (_filterStages.isNotEmpty) {
+        if (l.dealStage == null || !_filterStages.contains(l.dealStage)) {
+          return false;
+        }
+      }
+      if (_filterSizes.isNotEmpty && !_filterSizes.contains(l.dealValueRange)) {
+        return false;
+      }
+      if (_filterTimelines.isNotEmpty) {
+        if (l.timelineMonths == null) return false;
+        final any = _filterTimelines.any((b) => b.contains(l.timelineMonths!));
+        if (!any) return false;
+      }
+      return true;
+    }).toList();
+
+    switch (_sortKey) {
+      case _IbSortKey.dealSizeDesc:
+        list.sort((a, b) => _sizeOf(b).compareTo(_sizeOf(a)));
+        break;
+      case _IbSortKey.dealSizeAsc:
+        list.sort((a, b) => _sizeOf(a).compareTo(_sizeOf(b)));
+        break;
+      case _IbSortKey.dateNewest:
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case _IbSortKey.dateOldest:
+        list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
+    }
+    return list;
+  }
+
+  bool get _hasAnyFilter =>
+      _filterTypes.isNotEmpty ||
+      _filterStages.isNotEmpty ||
+      _filterSizes.isNotEmpty ||
+      _filterTimelines.isNotEmpty;
+
+  void _clearFilters() => setState(() {
+        _filterTypes.clear();
+        _filterStages.clear();
+        _filterSizes.clear();
+        _filterTimelines.clear();
+      });
 
   @override
   void initState() {
@@ -100,19 +187,36 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
 
                   const SizedBox(height: 22),
 
-                  // All IB leads
-                  _sectionTitle('All IB deals', _all.length),
+                  // All IB leads — with sort + filter
+                  _sectionTitle('All IB deals', _applyFiltersAndSort(_all).length),
+                  const SizedBox(height: 10),
+                  _buildSortFilterBar(),
+                  if (_filtersExpanded) ...[
+                    const SizedBox(height: 10),
+                    _buildFilterPanel(),
+                  ],
                   const SizedBox(height: 12),
-                  if (_all.isEmpty)
-                    const CompassEmptyState(
-                      icon: Icons.inbox_outlined,
-                      title: 'No IB leads yet',
-                    )
-                  else
-                    ..._all.take(10).map((ib) => _IbCard(
-                          ib: ib,
-                          onTap: () => context.push(RouteNames.ibLeadDetailPath(ib.id)),
-                        )),
+                  Builder(builder: (_) {
+                    final list = _applyFiltersAndSort(_all);
+                    if (list.isEmpty) {
+                      return CompassEmptyState(
+                        icon: Icons.inbox_outlined,
+                        title: _hasAnyFilter
+                            ? 'No deals match your filters'
+                            : 'No IB leads yet',
+                      );
+                    }
+                    return Column(
+                      children: list
+                          .take(50)
+                          .map((ib) => _IbCard(
+                                ib: ib,
+                                onTap: () => context
+                                    .push(RouteNames.ibLeadDetailPath(ib.id)),
+                              ))
+                          .toList(),
+                    );
+                  }),
                 ],
               ),
             ),
@@ -159,6 +263,200 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildSortFilterBar() {
+    final activeFilterCount = _filterTypes.length +
+        _filterStages.length +
+        _filterSizes.length +
+        _filterTimelines.length;
+    return Row(
+      children: [
+        Expanded(
+          child: Material(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => setState(() => _filtersExpanded = !_filtersExpanded),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: activeFilterCount > 0
+                        ? AppColors.navyPrimary.withValues(alpha: 0.4)
+                        : AppColors.borderDefault,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.tune,
+                        size: 16,
+                        color: activeFilterCount > 0
+                            ? AppColors.navyPrimary
+                            : AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      activeFilterCount > 0
+                          ? 'Filters  $activeFilterCount'
+                          : 'Filter',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: activeFilterCount > 0
+                            ? AppColors.navyPrimary
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      _filtersExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<_IbSortKey>(
+          initialValue: _sortKey,
+          onSelected: (k) => setState(() => _sortKey = k),
+          itemBuilder: (_) => _IbSortKey.values
+              .map((k) => PopupMenuItem(value: k, child: Text(k.label)))
+              .toList(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: AppColors.surfacePrimary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderDefault),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.swap_vert, size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Text(
+                  _sortKey.label,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterPanel() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _filterGroup(
+            'Deal type',
+            IbDealType.values
+                .map((t) => _toggleChip(
+                      label: t.label,
+                      selected: _filterTypes.contains(t),
+                      onTap: () => setState(() => _filterTypes.contains(t)
+                          ? _filterTypes.remove(t)
+                          : _filterTypes.add(t)),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 10),
+          _filterGroup(
+            'Deal stage',
+            IbDealStage.values
+                .map((s) => _toggleChip(
+                      label: s.label,
+                      selected: _filterStages.contains(s),
+                      onTap: () => setState(() => _filterStages.contains(s)
+                          ? _filterStages.remove(s)
+                          : _filterStages.add(s)),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 10),
+          _filterGroup(
+            'Deal size',
+            IbDealValueRange.values
+                .map((r) => _toggleChip(
+                      label: r.label,
+                      selected: _filterSizes.contains(r),
+                      onTap: () => setState(() => _filterSizes.contains(r)
+                          ? _filterSizes.remove(r)
+                          : _filterSizes.add(r)),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 10),
+          _filterGroup(
+            'Timeline',
+            _TimelineBucket.values
+                .map((b) => _toggleChip(
+                      label: b.label,
+                      selected: _filterTimelines.contains(b),
+                      onTap: () => setState(() => _filterTimelines.contains(b)
+                          ? _filterTimelines.remove(b)
+                          : _filterTimelines.add(b)),
+                    ))
+                .toList(),
+          ),
+          if (_hasAnyFilter)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _clearFilters,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: AppColors.navyPrimary,
+                ),
+                child: const Text('Clear all'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterGroup(String title, List<Widget> chips) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: AppTextStyles.caption.copyWith(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w600,
+        )),
+        const SizedBox(height: 6),
+        Wrap(spacing: 6, runSpacing: 6, children: chips),
+      ],
+    );
+  }
+
+  Widget _toggleChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return CompassFilterChip(selected: selected, label: label, onTap: onTap);
   }
 
   Widget _sectionTitle(String title, int count) {
@@ -335,7 +633,7 @@ class _IbCard extends StatelessWidget {
               children: [
                 Container(
                   width: 3,
-                  height: 36,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: _statusColor,
                     borderRadius: BorderRadius.circular(2),
@@ -354,6 +652,17 @@ class _IbCard extends StatelessWidget {
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ib.dealValue != null
+                            ? IndianCurrencyFormatter.shortForm(ib.dealValue!)
+                            : ib.dealValueRange.label,
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: AppColors.navyPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(

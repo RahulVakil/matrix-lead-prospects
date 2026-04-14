@@ -13,8 +13,7 @@ class IbLeadFormState extends Equatable {
   final double? dealValue;
   final IbDealValueRange? dealValueRange;
   final IbDealStage? dealStage;
-  final int? timelineMonth;
-  final int? timelineYear;
+  final int? timelineMonths;
   final List<IbIdentifiedHow> identifiedHow;
   final String notes;
   final bool isConfidential;
@@ -38,8 +37,7 @@ class IbLeadFormState extends Equatable {
     this.dealValue,
     this.dealValueRange,
     this.dealStage,
-    this.timelineMonth,
-    this.timelineYear,
+    this.timelineMonths,
     this.identifiedHow = const [],
     this.notes = '',
     this.isConfidential = false,
@@ -54,11 +52,7 @@ class IbLeadFormState extends Equatable {
     return companyName.trim().isNotEmpty &&
         dealType != null &&
         (dealType != IbDealType.other || dealTypeOtherText.trim().isNotEmpty) &&
-        dealStage != null &&
         (dealValue != null || dealValueRange != null) &&
-        timelineMonth != null &&
-        timelineYear != null &&
-        identifiedHow.isNotEmpty &&
         declarationAccepted;
   }
 
@@ -74,8 +68,9 @@ class IbLeadFormState extends Equatable {
     IbDealValueRange? dealValueRange,
     bool clearDealValueRange = false,
     IbDealStage? dealStage,
-    int? timelineMonth,
-    int? timelineYear,
+    int? timelineMonths,
+    bool clearTimelineMonths = false,
+    bool clearDealStage = false,
     List<IbIdentifiedHow>? identifiedHow,
     String? notes,
     bool? isConfidential,
@@ -96,9 +91,9 @@ class IbLeadFormState extends Equatable {
       dealValue: clearDealValue ? null : (dealValue ?? this.dealValue),
       dealValueRange:
           clearDealValueRange ? null : (dealValueRange ?? this.dealValueRange),
-      dealStage: dealStage ?? this.dealStage,
-      timelineMonth: timelineMonth ?? this.timelineMonth,
-      timelineYear: timelineYear ?? this.timelineYear,
+      dealStage: clearDealStage ? null : (dealStage ?? this.dealStage),
+      timelineMonths:
+          clearTimelineMonths ? null : (timelineMonths ?? this.timelineMonths),
       identifiedHow: identifiedHow ?? this.identifiedHow,
       notes: notes ?? this.notes,
       isConfidential: isConfidential ?? this.isConfidential,
@@ -122,8 +117,7 @@ class IbLeadFormState extends Equatable {
         dealValue,
         dealValueRange,
         dealStage,
-        timelineMonth,
-        timelineYear,
+        timelineMonths,
         identifiedHow,
         notes,
         isConfidential,

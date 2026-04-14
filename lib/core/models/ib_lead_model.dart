@@ -11,9 +11,8 @@ class IbLeadModel {
   final String? dealTypeOtherText;
   final double? dealValue;
   final IbDealValueRange dealValueRange;
-  final IbDealStage dealStage;
-  final int? timelineMonth; // 1..12
-  final int? timelineYear;
+  final IbDealStage? dealStage;
+  final int? timelineMonths; // 0, 2, 4, 6, 8, 10, 12 (12 means "12+")
   final List<IbIdentifiedHow> identifiedHow;
   final String? notes;
   final bool isConfidential;
@@ -38,9 +37,8 @@ class IbLeadModel {
     this.dealTypeOtherText,
     this.dealValue,
     required this.dealValueRange,
-    required this.dealStage,
-    this.timelineMonth,
-    this.timelineYear,
+    this.dealStage,
+    this.timelineMonths,
     this.identifiedHow = const [],
     this.notes,
     this.isConfidential = false,
@@ -57,12 +55,13 @@ class IbLeadModel {
   });
 
   String get timelineDisplay {
-    if (timelineMonth == null || timelineYear == null) return '—';
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return '${months[timelineMonth! - 1]} $timelineYear';
+    if (timelineMonths == null) return '—';
+    final m = timelineMonths!;
+    if (m == 0) return 'Now';
+    if (m >= 24) return '1 Year +';
+    if (m == 12) return '1 Year';
+    if (m > 12) return '1 Year ${m - 12} M';
+    return '$m months';
   }
 
   String get dealTypeDisplay => dealType == IbDealType.other && dealTypeOtherText != null
@@ -80,8 +79,7 @@ class IbLeadModel {
     double? dealValue,
     IbDealValueRange? dealValueRange,
     IbDealStage? dealStage,
-    int? timelineMonth,
-    int? timelineYear,
+    int? timelineMonths,
     List<IbIdentifiedHow>? identifiedHow,
     String? notes,
     bool? isConfidential,
@@ -104,8 +102,7 @@ class IbLeadModel {
       dealValue: dealValue ?? this.dealValue,
       dealValueRange: dealValueRange ?? this.dealValueRange,
       dealStage: dealStage ?? this.dealStage,
-      timelineMonth: timelineMonth ?? this.timelineMonth,
-      timelineYear: timelineYear ?? this.timelineYear,
+      timelineMonths: timelineMonths ?? this.timelineMonths,
       identifiedHow: identifiedHow ?? this.identifiedHow,
       notes: notes ?? this.notes,
       isConfidential: isConfidential ?? this.isConfidential,

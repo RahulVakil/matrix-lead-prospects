@@ -10,13 +10,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_chip.dart';
-import '../../../../core/widgets/compass_dropdown.dart';
 import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
-import '../../../../core/widgets/inr_currency_field.dart';
 import '../../../../core/widgets/key_contacts_field.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../coverage/presentation/widgets/coverage_result_sheet.dart';
@@ -172,15 +170,21 @@ class _CaptureBody extends ConsumerWidget {
           const SizedBox(height: 24),
           const CompassSectionHeader(title: 'Deal Details'),
           const SizedBox(height: 12),
-          CompassDropdown<IbDealType>(
-            label: 'Type of deal',
-            isRequired: true,
-            value: state.dealType,
-            hint: 'Choose deal type',
-            items: IbDealType.values
-                .map((d) => CompassDropdownItem(value: d, label: d.label))
+          Text('Type of deal *', style: AppTextStyles.labelSmall),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: IbDealType.values
+                .map(
+                  (d) => CompassChoiceChip<IbDealType>(
+                    value: d,
+                    groupValue: state.dealType,
+                    label: d.label,
+                    onSelected: notifier.setDealType,
+                  ),
+                )
                 .toList(),
-            onChanged: notifier.setDealType,
           ),
           if (state.dealType == IbDealType.other) ...[
             const SizedBox(height: 12),
@@ -192,14 +196,8 @@ class _CaptureBody extends ConsumerWidget {
             ),
           ],
           const SizedBox(height: 16),
-          INRCurrencyField(
-            label: 'Potential deal value',
-            value: state.dealValue,
-            onChanged: notifier.setDealValue,
-          ),
+          Text('Potential deal value *', style: AppTextStyles.labelSmall),
           const SizedBox(height: 8),
-          Text('Or pick a range', style: AppTextStyles.caption),
-          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -216,7 +214,7 @@ class _CaptureBody extends ConsumerWidget {
           ),
 
           const SizedBox(height: 16),
-          Text('Deal stage *', style: AppTextStyles.labelSmall),
+          Text('Deal stage', style: AppTextStyles.labelSmall),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -233,16 +231,15 @@ class _CaptureBody extends ConsumerWidget {
                 .toList(),
           ),
           const SizedBox(height: 16),
-          _TimelinePicker(
-            month: state.timelineMonth,
-            year: state.timelineYear,
-            onChanged: notifier.setTimeline,
+          _TimelineSlider(
+            months: state.timelineMonths,
+            onChanged: notifier.setTimelineMonths,
           ),
 
           const SizedBox(height: 24),
           const CompassSectionHeader(title: 'Context'),
           const SizedBox(height: 8),
-          Text('How was this identified? *', style: AppTextStyles.labelSmall),
+          Text('How was this identified?', style: AppTextStyles.labelSmall),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -484,55 +481,94 @@ class _IbCoverageRow extends StatelessWidget {
   }
 }
 
-class _TimelinePicker extends StatelessWidget {
-  final int? month;
-  final int? year;
-  final void Function(int month, int year) onChanged;
+// ────────────────────────────────────────────────────────────────────
+// Timeline slider — 2-month increments, Now → 24 months (last = "1Y+")
+// ────────────────────────────────────────────────────────────────────
 
-  const _TimelinePicker({
-    required this.month,
-    required this.year,
-    required this.onChanged,
-  });
+String _timelineLabel(int months) {
+  if (months == 0) return 'Now';
+  if (months >= 24) return '1 Year +';
+  if (months == 12) return '1 Year';
+  if (months > 12) {
+    final extra = months - 12;
+    return '1 Year $extra M';
+  }
+  return '$months months';
+}
+
+class _TimelineSlider extends StatelessWidget {
+  final int? months;
+  final ValueChanged<int> onChanged;
+
+  const _TimelineSlider({required this.months, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final years = List.generate(4, (i) => now.year + i);
-    return Row(
+    final current = months ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: CompassDropdown<int>(
-            label: 'Timeline month',
-            value: month,
-            isRequired: true,
-            items: List.generate(
-              12,
-              (i) => CompassDropdownItem(
-                value: i + 1,
-                label: const [
-                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-                ][i],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Timeline', style: AppTextStyles.labelSmall),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.navyPrimary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                months == null ? 'Not set' : _timelineLabel(current),
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.navyPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            onChanged: (m) {
-              if (m != null) onChanged(m, year ?? now.year);
-            },
+          ],
+        ),
+        const SizedBox(height: 4),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: AppColors.navyPrimary,
+            inactiveTrackColor: AppColors.borderDefault,
+            thumbColor: AppColors.navyPrimary,
+            overlayColor: AppColors.navyPrimary.withValues(alpha: 0.12),
+            valueIndicatorColor: AppColors.navyPrimary,
+            valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+            trackHeight: 4,
+          ),
+          child: Slider(
+            min: 0,
+            max: 24,
+            divisions: 12,
+            value: current.toDouble().clamp(0, 24),
+            label: _timelineLabel(current),
+            onChanged: (v) => onChanged(v.round()),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: CompassDropdown<int>(
-            label: 'Year',
-            value: year,
-            isRequired: true,
-            items: years
-                .map((y) => CompassDropdownItem(value: y, label: '$y'))
-                .toList(),
-            onChanged: (y) {
-              if (y != null) onChanged(month ?? now.month, y);
-            },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Now',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint, fontSize: 10)),
+              Text('6M',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint, fontSize: 10)),
+              Text('1Y',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint, fontSize: 10)),
+              Text('18M',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint, fontSize: 10)),
+              Text('1Y+',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint, fontSize: 10)),
+            ],
           ),
         ),
       ],

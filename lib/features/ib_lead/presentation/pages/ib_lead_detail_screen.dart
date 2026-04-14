@@ -182,7 +182,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
                       ? IndianCurrencyFormatter.shortForm(lead.dealValue!)
                       : lead.dealValueRange.label,
                 ),
-                _row('Stage', lead.dealStage.label),
+                _row('Stage', lead.dealStage?.label ?? '—'),
                 _row('Timeline', lead.timelineDisplay),
               ],
             ),
