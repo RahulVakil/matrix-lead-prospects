@@ -15,6 +15,7 @@ import '../features/dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_checker_queue_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_capture_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_detail_screen.dart';
+import '../features/ib_lead/presentation/pages/my_ib_leads_screen.dart';
 import '../features/leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
 import '../features/notifications/presentation/pages/notifications_screen.dart';
 import '../features/profiling_wizard/presentation/pages/profiling_wizard_screen.dart';
@@ -132,9 +133,14 @@ GoRouter createRouter(AuthCubit authCubit) {
               clientCode: extra?['clientCode'] as String?,
               companyName: extra?['companyName'] as String?,
               parentLeadId: extra?['parentLeadId'] as String?,
+              seedNotes: extra?['notes'] as String?,
             ),
           );
         },
+      ),
+      GoRoute(
+        path: '/ib-leads/my',
+        pageBuilder: (context, state) => _fadePage(const MyIbLeadsScreen()),
       ),
       GoRoute(
         path: '/ib-leads/:ibLeadId',

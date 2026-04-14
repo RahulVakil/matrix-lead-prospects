@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/di/injection.dart';
@@ -80,8 +82,15 @@ class LeadInboxState extends Equatable {
 
 class LeadInboxCubit extends Cubit<LeadInboxState> {
   final String rmId;
+  Timer? _searchDebounce;
 
   LeadInboxCubit({required this.rmId}) : super(const LeadInboxState());
+
+  @override
+  Future<void> close() {
+    _searchDebounce?.cancel();
+    return super.close();
+  }
 
   Future<void> loadLeads({bool refresh = false}) async {
     if (refresh) {
@@ -145,11 +154,33 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
   }
 
   void search(String query) {
-    if (query.isEmpty) {
+    // Instant optimistic filter on the already-loaded list for responsive feedback.
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
       emit(state.copyWith(clearSearchQuery: true, page: 1));
     } else {
-      emit(state.copyWith(searchQuery: query, page: 1));
+      final q = trimmed.toLowerCase();
+      final qDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
+      final preview = state.leads.where((l) {
+        final nameLc = l.fullName.toLowerCase();
+        final nameHit = nameLc.contains(q) ||
+            nameLc.split(RegExp(r'\s+')).any((t) => t.startsWith(q));
+        final phoneHit = qDigits.isNotEmpty &&
+            l.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(qDigits);
+        final companyHit = l.companyName?.toLowerCase().contains(q) ?? false;
+        final emailHit = l.email?.toLowerCase().contains(q) ?? false;
+        return nameHit || phoneHit || companyHit || emailHit;
+      }).toList();
+      emit(state.copyWith(
+        searchQuery: trimmed,
+        leads: preview,
+        page: 1,
+      ));
     }
-    loadLeads(refresh: true);
+    // Debounce the authoritative repo fetch.
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      loadLeads(refresh: true);
+    });
   }
 }

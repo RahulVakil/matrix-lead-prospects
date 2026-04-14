@@ -14,6 +14,7 @@ class IbLeadFormSeed {
   final String? clientName;
   final String? clientCode;
   final String? companyName;
+  final String? notes;
 
   const IbLeadFormSeed({
     required this.createdById,
@@ -21,6 +22,7 @@ class IbLeadFormSeed {
     this.clientName,
     this.clientCode,
     this.companyName,
+    this.notes,
   });
 
   @override
@@ -29,10 +31,12 @@ class IbLeadFormSeed {
       other.createdById == createdById &&
       other.clientName == clientName &&
       other.clientCode == clientCode &&
-      other.companyName == companyName;
+      other.companyName == companyName &&
+      other.notes == notes;
 
   @override
-  int get hashCode => Object.hash(createdById, clientName, clientCode, companyName);
+  int get hashCode =>
+      Object.hash(createdById, clientName, clientCode, companyName, notes);
 }
 
 final ibLeadFormProvider = StateNotifierProvider.autoDispose
@@ -46,5 +50,6 @@ final ibLeadFormProvider = StateNotifierProvider.autoDispose
     initialClientName: seed.clientName,
     initialClientCode: seed.clientCode,
     initialCompanyName: seed.companyName,
+    initialNotes: seed.notes,
   );
 });

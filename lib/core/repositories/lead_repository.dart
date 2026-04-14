@@ -8,6 +8,7 @@ import '../enums/lead_temperature.dart';
 import '../enums/lead_source.dart';
 import '../enums/loss_reason.dart';
 import '../enums/update_type.dart';
+import '../../features/get_lead/get_lead_dashboard_data.dart';
 
 abstract class LeadRepository {
   Future<PaginatedResult<LeadModel>> getLeads({
@@ -116,4 +117,15 @@ abstract class LeadRepository {
   /// Returns the updated [LeadModel] (now with the RM as owner) which is also
   /// inserted into the main `_leads` list so it appears in pipeline.
   Future<LeadModel> claimFromPool(String leadId, String rmId, String rmName);
+
+  /// Claim [count] leads from the pool in one shot, honoring this RM's
+  /// weekly budget. Throws if the request exceeds the effective cap.
+  Future<List<LeadModel>> claimBatchFromPool({
+    required String rmId,
+    required String rmName,
+    required int count,
+  });
+
+  /// Aggregate metrics for the Get Lead Dashboard (RM + TL).
+  Future<GetLeadDashboardData> getLeadDashboard(String rmId);
 }

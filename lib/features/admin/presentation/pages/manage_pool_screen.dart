@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection.dart';
-import '../../../../core/enums/lead_stage.dart';
+import '../../../../core/models/admin_action_record.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/services/mock/mock_data_generators.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_empty_state.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../widgets/dropped_lead_decision_sheet.dart';
 
 /// Unified Pool Management — combines Assign Leads, Dropped Leads
 /// and Request Log into one tabbed interface for Admin/MIS.
@@ -76,10 +80,31 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
     );
   }
 
-  Future<void> _returnToPool(LeadModel lead) async {
-    await _repo.returnDroppedToPool(lead.id);
+  Future<void> _reviewDropped(LeadModel lead) async {
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    await showDroppedLeadDecisionSheet(
+      context,
+      lead,
+      adminId: user.id,
+      adminName: user.name,
+      onDecision: (record) async {
+        if (record.action == AdminLeadAction.returnedToPool) {
+          await _repo.returnDroppedToPool(lead.id);
+        }
+        // Always append audit record. For both decisions the action is durable.
+        final refreshed = await _repo.getLeadById(lead.id).catchError((_) => lead);
+        await _repo.updateLead(refreshed.copyWith(
+          adminActionRecords: [...refreshed.adminActionRecords, record],
+        ));
+      },
+    );
     if (mounted) {
-      showCompassSnack(context, message: '${lead.fullName} returned to pool', type: CompassSnackType.success);
+      showCompassSnack(
+        context,
+        message: 'Decision recorded for ${lead.fullName}',
+        type: CompassSnackType.success,
+      );
       _load();
     }
   }
@@ -152,7 +177,7 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                       _AssignTab(poolLeads: _poolLeads, onAssign: _assignLead),
                       _DroppedTab(
                         leads: _droppedLeads,
-                        onReturn: _returnToPool,
+                        onReview: _reviewDropped,
                       ),
                       _RequestLogTab(),
                     ],
@@ -294,9 +319,9 @@ class _AssignTab extends StatelessWidget {
 
 class _DroppedTab extends StatelessWidget {
   final List<LeadModel> leads;
-  final ValueChanged<LeadModel> onReturn;
+  final ValueChanged<LeadModel> onReview;
 
-  const _DroppedTab({required this.leads, required this.onReturn});
+  const _DroppedTab({required this.leads, required this.onReview});
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +352,7 @@ class _DroppedTab extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      lead.fullName,
+                      PiiDisplay.nameFor(lead.fullName, lead.consentStatus),
                       style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -368,10 +393,24 @@ class _DroppedTab extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               CompassButton(
-                label: 'Return to pool',
-                icon: Icons.replay,
-                onPressed: () => onReturn(lead),
+                label: 'Review decision',
+                icon: Icons.gavel_outlined,
+                onPressed: () => onReview(lead),
               ),
+              if (lead.adminActionRecords.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                ...lead.adminActionRecords.reversed.take(2).map(
+                      (r) => Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${r.action == AdminLeadAction.returnedToPool ? "Returned" : "Kept"} by ${r.adminName} · ${r.remarks}',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
             ],
           ),
         );

@@ -6,6 +6,7 @@ import '../enums/lead_source.dart';
 import '../enums/retention_status.dart';
 import '../enums/update_type.dart';
 import 'activity_model.dart';
+import 'admin_action_record.dart';
 import 'consent_record.dart';
 import 'deal_info_model.dart';
 import 'next_action_model.dart';
@@ -51,6 +52,7 @@ class LeadModel {
   final NextActionModel? nextAction;
   final LeadUpdateStatus? latestStatus;
   final List<String> ibLeadIds;
+  final DateTime? ibConvertedAt;
 
   // Drop tracking
   final DropReason? dropReason;
@@ -58,6 +60,7 @@ class LeadModel {
   final DateTime? droppedAt;
   final String? droppedByUserId;
   final bool returnToPoolApproved; // Admin/MIS can approve return to Get Lead pool
+  final List<AdminActionRecord> adminActionRecords;
 
   // DPDP Act compliance fields
   final ConsentStatus consentStatus;
@@ -105,11 +108,13 @@ class LeadModel {
     this.nextAction,
     this.latestStatus,
     this.ibLeadIds = const [],
+    this.ibConvertedAt,
     this.dropReason,
     this.dropNotes,
     this.droppedAt,
     this.droppedByUserId,
     this.returnToPoolApproved = false,
+    this.adminActionRecords = const [],
     this.consentStatus = ConsentStatus.pending,
     this.consentRecords = const [],
     this.retentionStatus = RetentionStatus.active,
@@ -207,11 +212,13 @@ class LeadModel {
     bool clearNextAction = false,
     LeadUpdateStatus? latestStatus,
     List<String>? ibLeadIds,
+    DateTime? ibConvertedAt,
     DropReason? dropReason,
     String? dropNotes,
     DateTime? droppedAt,
     String? droppedByUserId,
     bool? returnToPoolApproved,
+    List<AdminActionRecord>? adminActionRecords,
     ConsentStatus? consentStatus,
     List<ConsentRecord>? consentRecords,
     RetentionStatus? retentionStatus,
@@ -257,11 +264,13 @@ class LeadModel {
       nextAction: clearNextAction ? null : (nextAction ?? this.nextAction),
       latestStatus: latestStatus ?? this.latestStatus,
       ibLeadIds: ibLeadIds ?? this.ibLeadIds,
+      ibConvertedAt: ibConvertedAt ?? this.ibConvertedAt,
       dropReason: dropReason ?? this.dropReason,
       dropNotes: dropNotes ?? this.dropNotes,
       droppedAt: droppedAt ?? this.droppedAt,
       droppedByUserId: droppedByUserId ?? this.droppedByUserId,
       returnToPoolApproved: returnToPoolApproved ?? this.returnToPoolApproved,
+      adminActionRecords: adminActionRecords ?? this.adminActionRecords,
       consentStatus: consentStatus ?? this.consentStatus,
       consentRecords: consentRecords ?? this.consentRecords,
       retentionStatus: retentionStatus ?? this.retentionStatus,

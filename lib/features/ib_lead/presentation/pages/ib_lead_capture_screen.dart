@@ -26,6 +26,7 @@ class IbLeadCaptureScreen extends StatelessWidget {
   final String? clientCode;
   final String? companyName;
   final String? parentLeadId;
+  final String? seedNotes;
 
   const IbLeadCaptureScreen({
     super.key,
@@ -33,6 +34,7 @@ class IbLeadCaptureScreen extends StatelessWidget {
     this.clientCode,
     this.companyName,
     this.parentLeadId,
+    this.seedNotes,
   });
 
   @override
@@ -46,6 +48,7 @@ class IbLeadCaptureScreen extends StatelessWidget {
       clientName: clientName,
       clientCode: clientCode,
       companyName: companyName,
+      notes: seedNotes,
     );
 
     return _CaptureBody(seed: seed, parentLeadId: parentLeadId);
@@ -106,6 +109,7 @@ class _CaptureBody extends ConsumerWidget {
                                 final parent = await repo.getLeadById(parentLeadId!);
                                 await repo.updateLead(parent.copyWith(
                                   ibLeadIds: [...parent.ibLeadIds, saved.id],
+                                  ibConvertedAt: DateTime.now(),
                                 ));
                               } catch (_) {}
                             }

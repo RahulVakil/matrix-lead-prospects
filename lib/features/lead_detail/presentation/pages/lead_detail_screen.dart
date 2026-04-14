@@ -16,6 +16,7 @@ import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/inr_formatter.dart';
+import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
@@ -28,8 +29,8 @@ import '../../../stage/presentation/widgets/stage_advance_sheet.dart';
 import '../widgets/audit_trail_section.dart';
 import '../widgets/data_export_sheet.dart';
 import '../widgets/deletion_request_sheet.dart';
+import '../widgets/convert_to_ib_sheet.dart';
 import '../widgets/edit_lead_sheet.dart';
-import '../widgets/privacy_consent_section.dart';
 import '../widgets/retention_banner.dart';
 import '../../../stage/presentation/widgets/drop_lead_sheet.dart';
 
@@ -252,17 +253,6 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           const SizedBox(height: 24),
           _DetailsBlock(lead: lead),
           const SizedBox(height: 12),
-          PrivacyConsentSection(
-            status: lead.consentStatus,
-            records: lead.consentRecords,
-            onRecordConsent: () {
-              showCompassSnack(context, message: 'Consent recorded', type: CompassSnackType.success);
-            },
-            onRevokeConsent: () {
-              showCompassSnack(context, message: 'Consent revoked — lead flagged for deletion', type: CompassSnackType.warn);
-            },
-          ),
-          const SizedBox(height: 12),
           AuditTrailSection(entries: _auditEntries),
           const SizedBox(height: 96),
         ],
@@ -359,12 +349,20 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     if (lead == null) return;
     switch (value) {
       case 'ib':
-        await context.push('/ib-leads/new', extra: {
-          'clientName': lead.fullName,
-          'companyName': lead.companyName,
-          'parentLeadId': lead.id,
-        });
-        if (mounted) await _load();
+        final confirmed = await showConvertToIbSheet(context, lead);
+        if (confirmed == true && mounted) {
+          await context.push('/ib-leads/new', extra: {
+            'clientName': lead.fullName,
+            'companyName': lead.companyName,
+            'parentLeadId': lead.id,
+            'phone': lead.phone,
+            'email': lead.email,
+            'city': lead.city,
+            'estimatedAum': lead.estimatedAum,
+            'notes': lead.notes,
+          });
+          if (mounted) await _load();
+        }
         break;
       case 'edit':
         _editLead();
@@ -432,8 +430,8 @@ class _LeadHeroHeader extends StatelessWidget {
                     child: ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.business_center_outlined, size: 20),
-                      title: Text('Capture IB Lead'),
+                      leading: Icon(Icons.swap_horiz, size: 20),
+                      title: Text('Convert to IB Lead'),
                     ),
                   ),
                   PopupMenuItem(
@@ -471,7 +469,8 @@ class _LeadHeroHeader extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        lead.companyName ?? lead.phone,
+                        lead.companyName ??
+                            PiiDisplay.phoneFor(lead.phone, lead.consentStatus),
                         style: AppTextStyles.bodySmall.copyWith(
                           color: Colors.white.withValues(alpha: 0.72),
                         ),
@@ -1223,8 +1222,10 @@ class _DetailsBlockState extends State<_DetailsBlock>
                       children: [
                         const Divider(height: 1),
                         const SizedBox(height: 12),
-                        _row('Phone', l.phone),
-                        if (l.email != null) _row('Email', l.email!),
+                        _row('Phone', PiiDisplay.phoneFor(l.phone, l.consentStatus)),
+                        if (l.email != null)
+                          _row('Email',
+                              PiiDisplay.emailFor(l.email!, l.consentStatus)),
                         _row('Source', l.source.label),
                         if (l.productInterest.isNotEmpty)
                           _row('Products', l.productInterest.join(', ')),

@@ -8,7 +8,7 @@ enum LeadStage {
   lead('Lead', 'S1', AppColors.stageNew, 1),
   profiling('Profiling', 'S2', AppColors.stageProfiling, 2),
   engage('Engage', 'S3', AppColors.stageEngage, 3),
-  onboard('Onboard', 'S4', AppColors.stageClient, 4),
+  onboard('Onboarded', 'S4', AppColors.stageClient, 4),
   dropped('Dropped', 'DR', AppColors.errorRed, 0),
   parked('Parked', 'P', AppColors.dormantGray, 0),
   lostCompetitor('Lost - Competitor', 'L1', AppColors.errorRed, 0),
@@ -82,8 +82,6 @@ enum DropReason {
   wrongContact('Wrong contact info', 'Phone/email invalid or belongs to someone else'),
   notInterested('Not interested', 'Prospect explicitly declined'),
   duplicateEntry('Duplicate', 'Same person already exists as another lead/client'),
-  outsideScope('Outside scope', 'Prospect does not fit our target segment'),
-  movedAbroad('Moved abroad', 'Prospect relocated outside serviceable geography'),
   other('Other', 'Custom reason specified by RM');
 
   final String label;

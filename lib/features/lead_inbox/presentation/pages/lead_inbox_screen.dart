@@ -69,6 +69,17 @@ class _InboxBodyState extends State<_InboxBody> {
                   hint: 'Search by name, phone, company…',
                   prefixIcon: Icons.search,
                   onChanged: cubit.search,
+                  suffix: (state.searchQuery ?? '').isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            cubit.search('');
+                          },
+                          splashRadius: 18,
+                          tooltip: 'Clear search',
+                        ),
                 ),
               ),
 

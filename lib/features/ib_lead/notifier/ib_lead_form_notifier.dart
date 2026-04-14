@@ -24,6 +24,7 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
     String? initialClientName,
     String? initialClientCode,
     String? initialCompanyName,
+    String? initialNotes,
   })  : _repository = repository,
         _notifications = notifications,
         _coverage = coverage,
@@ -31,6 +32,7 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
           clientName: initialClientName,
           clientCode: initialClientCode,
           companyName: initialCompanyName ?? '',
+          notes: initialNotes ?? '',
         ));
 
   /// Optional, non-blocking coverage check.

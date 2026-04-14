@@ -10,12 +10,21 @@ import '../../models/next_action_model.dart';
 import '../../models/paginated_result.dart';
 import '../../models/timeline_entry_model.dart';
 import '../../repositories/lead_repository.dart';
+import '../../../features/get_lead/get_lead_dashboard_data.dart';
 import 'mock_data_generators.dart';
 
 class MockLeadRepository implements LeadRepository {
   late final List<LeadModel> _leads;
   late final List<LeadModel> _pool;
   final Map<String, List<TimelineEntryModel>> _extraTimeline = {};
+
+  /// Per-RM log of pool-claim timestamps (mock-only; in prod this lives in a
+  /// claims table). Used to compute rolling 7-day window and ITD totals.
+  final Map<String, List<DateTime>> _claimLog = {};
+
+  /// Tracks the subset of lead ids that originated from the pool (claimed).
+  /// Used to compute "Pool Leads Converted to Clients" ITD.
+  final Set<String> _poolOriginLeadIds = {};
 
   MockLeadRepository() {
     _leads = MockDataGenerators.generateLeads(150);
@@ -50,11 +59,23 @@ class MockLeadRepository implements LeadRepository {
     if (source != null) {
       filtered = filtered.where((l) => l.source == source).toList();
     }
-    if (searchQuery != null && searchQuery.isNotEmpty) {
-      final q = searchQuery.toLowerCase();
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final q = searchQuery.trim().toLowerCase();
+      // Phone normalization: strip non-digits so "+91 98765-43210" matches "9876543210".
+      final qDigits = searchQuery.replaceAll(RegExp(r'[^0-9]'), '');
+      bool nameMatch(String name) {
+        final n = name.toLowerCase();
+        if (n.contains(q)) return true;
+        return n.split(RegExp(r'\s+')).any((t) => t.startsWith(q));
+      }
+      bool phoneMatch(String phone) {
+        if (qDigits.isEmpty) return false;
+        final p = phone.replaceAll(RegExp(r'[^0-9]'), '');
+        return p.contains(qDigits);
+      }
       filtered = filtered.where((l) =>
-          l.fullName.toLowerCase().contains(q) ||
-          l.phone.contains(q) ||
+          nameMatch(l.fullName) ||
+          phoneMatch(l.phone) ||
           (l.email?.toLowerCase().contains(q) ?? false) ||
           (l.companyName?.toLowerCase().contains(q) ?? false)).toList();
     }
@@ -416,7 +437,77 @@ class MockLeadRepository implements LeadRepository {
           updatedAt: DateTime.now(),
         );
     _leads.insert(0, claimed);
+    _claimLog.putIfAbsent(rmId, () => []).add(DateTime.now());
+    _poolOriginLeadIds.add(claimed.id);
     return claimed;
+  }
+
+  @override
+  Future<List<LeadModel>> claimBatchFromPool({
+    required String rmId,
+    required String rmName,
+    required int count,
+  }) async {
+    if (count <= 0) return const [];
+    // Gate against the effective cap.
+    final dash = await getLeadDashboard(rmId);
+    if (count > dash.remainingThisWeek) {
+      throw StateError(
+        'Weekly cap reached. Remaining this week: ${dash.remainingThisWeek} '
+        '(effective cap ${dash.effectiveWeeklyCap}).',
+      );
+    }
+    await Future.delayed(const Duration(milliseconds: 400));
+    final claimed = <LeadModel>[];
+    for (var i = 0; i < count; i++) {
+      if (_pool.isEmpty) break;
+      final lead = _pool.removeAt(0).copyWith(
+            assignedRmId: rmId,
+            assignedRmName: rmName,
+            updatedAt: DateTime.now(),
+          );
+      _leads.insert(0, lead);
+      _claimLog.putIfAbsent(rmId, () => []).add(DateTime.now());
+      _poolOriginLeadIds.add(lead.id);
+      claimed.add(lead);
+    }
+    return claimed;
+  }
+
+  @override
+  Future<GetLeadDashboardData> getLeadDashboard(String rmId) async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    final cutoff = DateTime.now().subtract(const Duration(days: 7));
+    final log = _claimLog[rmId] ?? const [];
+    final claimsIn7 = log.where((t) => t.isAfter(cutoff)).length;
+    final wrongContactIn7 = _leads
+        .where((l) =>
+            l.droppedByUserId == rmId &&
+            l.dropReason == DropReason.wrongContact &&
+            l.droppedAt != null &&
+            l.droppedAt!.isAfter(cutoff))
+        .length;
+    final requestedItd = log.length;
+    final droppedFromRequested = _leads
+        .where((l) =>
+            _poolOriginLeadIds.contains(l.id) &&
+            l.droppedByUserId == rmId &&
+            l.stage == LeadStage.dropped)
+        .length;
+    final convertedFromRequested = _leads
+        .where((l) =>
+            _poolOriginLeadIds.contains(l.id) &&
+            l.assignedRmId == rmId &&
+            l.stage == LeadStage.onboard)
+        .length;
+    return GetLeadDashboardData(
+      totalPoolLeads: _pool.length,
+      leadsRequestedItd: requestedItd,
+      requestedLeadsDroppedItd: droppedFromRequested,
+      poolLeadsConvertedItd: convertedFromRequested,
+      claimsInLast7Days: claimsIn7,
+      wrongContactDropsInLast7Days: wrongContactIn7,
+    );
   }
 
   @override

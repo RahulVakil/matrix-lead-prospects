@@ -261,10 +261,20 @@ class _TotalHeroCard extends StatelessWidget {
   final LeadsDashboardState state;
   const _TotalHeroCard({required this.state});
 
+  int get _active => state.totalLeads;
+  int get _onboarded => state.pipeline[LeadStage.onboard] ?? 0;
+  int get _funnelTotal {
+    final t = (state.pipeline[LeadStage.lead] ?? 0) +
+        (state.pipeline[LeadStage.profiling] ?? 0) +
+        (state.pipeline[LeadStage.engage] ?? 0) +
+        _onboarded;
+    return t == 0 ? 1 : t; // avoid /0 in ring
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -280,113 +290,237 @@ class _TotalHeroCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${state.totalLeads}',
-                style: const TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  height: 1.0,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Active leads',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              if (state.droppedCount > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.remove_circle_outline, size: 14, color: Colors.redAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${state.droppedCount} dropped',
-                        style: AppTextStyles.caption.copyWith(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontWeight: FontWeight.w600,
+          // Left — total + conversion ring
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: _active.toDouble()),
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, __) => Text(
+                        '${v.round()}',
+                        style: const TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.0,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Active leads',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withValues(alpha: 0.72),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _tempPill('Hot', state.hotCount, AppColors.hotRed),
-              const SizedBox(width: 10),
-              _tempPill('Warm', state.warmCount, AppColors.warmAmber),
-              const SizedBox(width: 10),
-              _tempPill('Cold', state.coldCount, AppColors.coldBlue),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${state.overallConversion.toStringAsFixed(0)}% converted',
+                const SizedBox(height: 2),
+                Text(
+                  state.droppedCount > 0
+                      ? '${state.droppedCount} dropped • ${_active + state.droppedCount} total'
+                      : 'ITD snapshot',
                   style: AppTextStyles.caption.copyWith(
-                    color: AppColors.successGreen,
-                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.55),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _ConversionRing(
+                      percent: state.overallConversion,
+                      size: 56,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lead → Onboarded',
+                            style: AppTextStyles.caption.copyWith(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$_onboarded of $_funnelTotal',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Right — Hot/Warm/Cold mini-bars
+          Expanded(
+            flex: 6,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TempRow(
+                  label: 'Hot',
+                  count: state.hotCount,
+                  total: _active,
+                  color: AppColors.hotRed,
+                ),
+                const SizedBox(height: 8),
+                _TempRow(
+                  label: 'Warm',
+                  count: state.warmCount,
+                  total: _active,
+                  color: AppColors.warmAmber,
+                ),
+                const SizedBox(height: 8),
+                _TempRow(
+                  label: 'Cold',
+                  count: state.coldCount,
+                  total: _active,
+                  color: AppColors.coldBlue,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _tempPill(String label, int count, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
+class _ConversionRing extends StatelessWidget {
+  final double percent;
+  final double size;
+  const _ConversionRing({required this.percent, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: percent.clamp(0, 100)),
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, __) => SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: size,
+              height: size,
+              child: CircularProgressIndicator(
+                value: v / 100,
+                strokeWidth: 5,
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.successGreen),
+              ),
+            ),
+            Text(
+              '${v.round()}%',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            '$count',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+    );
+  }
+}
+
+class _TempRow extends StatelessWidget {
+  final String label;
+  final int count;
+  final int total;
+  final Color color;
+  const _TempRow({
+    required this.label,
+    required this.count,
+    required this.total,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : (count / total).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration:
+                  BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${(pct * 100).round()}%',
+              style: AppTextStyles.caption.copyWith(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: pct),
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOutCubic,
+            builder: (_, v, __) => LinearProgressIndicator(
+              value: v,
+              minHeight: 5,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -563,15 +697,18 @@ class _QuickActions extends StatelessWidget {
       children: [
         _qa(Icons.people_alt_outlined, 'All leads', AppColors.navyPrimary,
             () => context.push(RouteNames.leads)),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _qa(Icons.person_add_alt_1, 'New lead', AppColors.tealAccent,
             () => context.push('/leads/new')),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _qa(Icons.move_to_inbox_outlined, 'Get lead', AppColors.coldBlue,
             () => context.push('/get-lead')),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _qa(Icons.business_center_outlined, 'IB lead', AppColors.stageOpportunity,
             () => context.push('/ib-leads/new')),
+        const SizedBox(width: 8),
+        _qa(Icons.account_tree_outlined, 'My IB Leads', AppColors.navyPrimary,
+            () => context.push('/ib-leads/my')),
       ],
     );
   }
