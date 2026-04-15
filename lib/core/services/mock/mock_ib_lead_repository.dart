@@ -1,5 +1,6 @@
 import '../../enums/ib_deal_type.dart';
 import '../../models/ib_lead_model.dart';
+import '../../models/ib_progress_update.dart';
 import '../../models/key_contact_model.dart';
 import '../../repositories/ib_lead_repository.dart';
 
@@ -21,6 +22,8 @@ class MockIbLeadRepository implements IbLeadRepository {
         KeyContactModel(name: 'Rajesh Mehta', designation: 'Promoter & MD'),
         KeyContactModel(name: 'Anita Kapoor', designation: 'CFO'),
       ],
+      industry: IbIndustry.manufacturing,
+      websiteUrl: 'https://mehta-industries.example.com',
       dealType: IbDealType.ma,
       dealValue: 1500000000,
       dealValueRange: IbDealValueRange.range100To500Cr,
@@ -29,6 +32,8 @@ class MockIbLeadRepository implements IbLeadRepository {
       identifiedHow: const [IbIdentifiedHow.clientMeeting, IbIdentifiedHow.referral],
       notes: 'Sector consolidation play. Looking at 2-3 strategic targets.',
       isConfidential: true,
+      confidentialReason:
+          'Promoter relationship is sensitive; target discussions not public.',
       declarationAccepted: true,
       status: IbLeadStatus.pending,
       createdById: 'RM001',
@@ -41,6 +46,8 @@ class MockIbLeadRepository implements IbLeadRepository {
       clientName: 'Vikram Bajaj',
       companyName: 'Bajaj Auto Components Ltd',
       contacts: const [KeyContactModel(name: 'Vikram Bajaj', designation: 'Chairman')],
+      industry: IbIndustry.auto,
+      websiteUrl: 'https://bajaj-auto-components.example.com',
       dealType: IbDealType.ecm,
       dealValue: 5000000000,
       dealValueRange: IbDealValueRange.above500Cr,
@@ -53,8 +60,22 @@ class MockIbLeadRepository implements IbLeadRepository {
       status: IbLeadStatus.approved,
       createdById: 'RM002',
       createdByName: 'Amit Verma',
-      createdAt: now.subtract(const Duration(days: 10)),
-      submittedAt: now.subtract(const Duration(days: 10)),
+      assignedIbRmId: 'IBRM_SONIA',
+      assignedIbRmName: 'Sonia Parekh',
+      assignedAt: now.subtract(const Duration(days: 7)),
+      assignmentCcList: const ['ecm-desk@jmfs.in', 'head.ib@jmfs.in'],
+      progressUpdates: [
+        IbProgressUpdate(
+          id: 'IBP_IBL0002_1',
+          status: IbProgressStatus.inDiscussion,
+          notes: 'Initial call with Bajaj Capital team. Diligence pack requested.',
+          authorId: 'RM002',
+          authorName: 'Amit Verma',
+          createdAt: now.subtract(const Duration(days: 32)),
+        ),
+      ],
+      createdAt: now.subtract(const Duration(days: 55)),
+      submittedAt: now.subtract(const Duration(days: 55)),
       decidedAt: now.subtract(const Duration(days: 7)),
     ));
     _put(IbLeadModel(
@@ -181,6 +202,29 @@ class MockIbLeadRepository implements IbLeadRepository {
       submittedAt: now.subtract(const Duration(days: 7)),
       decidedAt: now.subtract(const Duration(days: 5)),
       remarks: 'Competitor PE fund already in advanced discussions. Need to confirm exclusivity window before IB team engagement.',
+    ));
+    // Demo lead in the new "Dropped or Closed" status so the filter chip
+    // surfaces visible content in the My IB Leads list.
+    _put(IbLeadModel(
+      id: 'IBL0009',
+      companyName: 'NorthStar Logistics LLP',
+      contacts: const [KeyContactModel(name: 'Aman Khanna', designation: 'CFO')],
+      dealType: IbDealType.dcm,
+      dealValue: 350000000,
+      dealValueRange: IbDealValueRange.range100To500Cr,
+      dealStage: IbDealStage.activeDiscussion,
+      timelineMonths: 8,
+      identifiedHow: const [IbIdentifiedHow.referral],
+      notes: 'Promoter shelved fundraise post merger announcement.',
+      isConfidential: false,
+      declarationAccepted: true,
+      status: IbLeadStatus.dropped,
+      createdById: 'RM002',
+      createdByName: 'Amit Verma',
+      createdAt: now.subtract(const Duration(days: 18)),
+      submittedAt: now.subtract(const Duration(days: 18)),
+      decidedAt: now.subtract(const Duration(days: 4)),
+      remarks: 'Lead voluntarily closed by RM after promoter merger filing.',
     ));
   }
 

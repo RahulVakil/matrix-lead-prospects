@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_empty_state.dart';
 import '../../../../core/widgets/compass_loader.dart';
@@ -461,7 +462,7 @@ class _ClaimRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        lead.fullName,
+                        PiiDisplay.nameFor(lead.fullName, lead.consentStatus),
                         style: AppTextStyles.bodySmall.copyWith(
                           fontWeight: FontWeight.w600,
                         ),

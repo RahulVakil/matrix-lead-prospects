@@ -51,7 +51,6 @@ enum _TimelineBucket {
 class _IbDashboardScreenState extends State<IbDashboardScreen> {
   final _repo = getIt<IbLeadRepository>();
   bool _loading = true;
-  List<IbLeadModel> _pending = [];
   List<IbLeadModel> _all = [];
 
   _IbSortKey _sortKey = _IbSortKey.dateNewest;
@@ -124,9 +123,9 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final userId = context.read<AuthCubit>().state.currentUser?.id ?? '';
-    // IB role sees all IB leads; other roles see their own
-    _all = await _repo.getAllForBranchHead(userId);
-    _pending = _all.where((l) => l.status == IbLeadStatus.pending).toList();
+    final raw = await _repo.getAllForBranchHead(userId);
+    // IB user only sees Approved leads — under-review leads stay with Admin/MIS.
+    _all = raw.where((l) => l.status.isApproved).toList();
     if (mounted) setState(() => _loading = false);
   }
 
@@ -135,11 +134,6 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
     final user = context.watch<AuthCubit>().state.currentUser;
     return HeroScaffold(
       header: _IbHeader(name: user?.name ?? 'IB'),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.navyPrimary,
-        onPressed: () => context.push('/ib-leads/new'),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
       body: _loading
           ? const Center(child: CompassLoader())
           : RefreshIndicator(
@@ -148,47 +142,16 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 18, 16, 96),
                 children: [
-                  // Summary strip
+                  // Summary strip — shows Total Leads + Approved (Pending bucket
+                  // belongs to Admin/MIS, IB never sees in-review leads).
                   _IbSummaryCard(
-                    total: _all.length + _pending.length,
-                    pending: _pending.length,
-                    approved: _all.where((l) => l.status == IbLeadStatus.approved).length,
+                    total: _all.length,
+                    approved: _all.where((l) => l.status.isApproved).length,
                   ),
-                  const SizedBox(height: 22),
-
-                  // Quick actions
-                  Row(
-                    children: [
-                      _qa(Icons.fact_check_outlined, 'Pending', AppColors.warmAmber,
-                          () => context.push('/ib-leads')),
-                      const SizedBox(width: 10),
-                      _qa(Icons.business_center_outlined, 'New IB', AppColors.tealAccent,
-                          () => context.push('/ib-leads/new')),
-                      const SizedBox(width: 10),
-                      _qa(Icons.notifications_outlined, 'Alerts', AppColors.coldBlue,
-                          () => context.push('/notifications')),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-
-                  // Pending approvals
-                  _sectionTitle('Pending review', _pending.length),
-                  const SizedBox(height: 12),
-                  if (_pending.isEmpty)
-                    const CompassEmptyState(
-                      icon: Icons.check_circle_outline,
-                      title: 'No pending IB leads',
-                    )
-                  else
-                    ..._pending.take(5).map((ib) => _IbCard(
-                          ib: ib,
-                          onTap: () => context.push(RouteNames.ibLeadDetailPath(ib.id)),
-                        )),
-
                   const SizedBox(height: 22),
 
                   // All IB leads — with sort + filter
-                  _sectionTitle('All IB deals', _applyFiltersAndSort(_all).length),
+                  _sectionTitle('All IB leads', _applyFiltersAndSort(_all).length),
                   const SizedBox(height: 10),
                   _buildSortFilterBar(),
                   if (_filtersExpanded) ...[
@@ -220,48 +183,6 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _qa(IconData icon, String label, Color color, VoidCallback onTap) {
-    return Expanded(
-      child: Material(
-        color: AppColors.surfacePrimary,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -529,10 +450,9 @@ class _IbHeader extends StatelessWidget {
 
 class _IbSummaryCard extends StatelessWidget {
   final int total;
-  final int pending;
   final int approved;
 
-  const _IbSummaryCard({required this.total, required this.pending, required this.approved});
+  const _IbSummaryCard({required this.total, required this.approved});
 
   @override
   Widget build(BuildContext context) {
@@ -555,9 +475,7 @@ class _IbSummaryCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _stat('$total', 'Total deals', Colors.white),
-          _divider(),
-          _stat('$pending', 'Pending', AppColors.warmAmber),
+          _stat('$total', 'Total Leads', Colors.white),
           _divider(),
           _stat('$approved', 'Approved', AppColors.successGreen),
         ],
@@ -609,8 +527,15 @@ class _IbCard extends StatelessWidget {
         IbLeadStatus.pending => AppColors.warmAmber,
         IbLeadStatus.approved => AppColors.successGreen,
         IbLeadStatus.sentBack => AppColors.errorRed,
-        IbLeadStatus.forwarded => AppColors.tealAccent,
-        _ => AppColors.textHint,
+        IbLeadStatus.forwarded => AppColors.successGreen,
+        IbLeadStatus.draft => AppColors.warmAmber,
+        IbLeadStatus.dropped => AppColors.dormantGray,
+      };
+
+  Color get _tempColor => switch (ib.temperature) {
+        IbLeadTemperature.hot => AppColors.errorRed,
+        IbLeadTemperature.warm => AppColors.warmAmber,
+        IbLeadTemperature.cold => AppColors.coldBlue,
       };
 
   @override
@@ -644,14 +569,52 @@ class _IbCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        ib.companyName,
-                        style: AppTextStyles.labelLarge.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              ib.companyName,
+                              style: AppTextStyles.labelLarge.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _tempColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: _tempColor.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                      color: _tempColor,
+                                      shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  ib.temperature.label,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: _tempColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(

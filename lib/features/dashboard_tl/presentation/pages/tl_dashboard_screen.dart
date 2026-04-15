@@ -31,7 +31,13 @@ class TlDashboardScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _kpiCard('Avg Score', '58', AppColors.warmAmber),
+              // Tap to open the team's IB Leads list (TL view of My IB Leads).
+              _kpiCard(
+                'IB Leads',
+                '9',
+                AppColors.stageOpportunity,
+                onTap: () => context.push('/ib-leads'),
+              ),
               const SizedBox(width: 12),
               _kpiCard('Dropped', '8', AppColors.errorRed),
               const SizedBox(width: 12),
@@ -70,33 +76,40 @@ class TlDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _kpiCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          children: [
-            Text(value, style: AppTextStyles.heading1.copyWith(color: color)),
-            const SizedBox(height: 2),
-            Text(label, style: AppTextStyles.caption, textAlign: TextAlign.center),
-          ],
-        ),
+  Widget _kpiCard(String label, String value, Color color, {VoidCallback? onTap}) {
+    final card = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
+      child: Column(
+        children: [
+          Text(value, style: AppTextStyles.heading1.copyWith(color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: AppTextStyles.caption, textAlign: TextAlign.center),
+        ],
+      ),
+    );
+    return Expanded(
+      child: onTap == null
+          ? card
+          : InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: card,
+            ),
     );
   }
 
   Widget _pipelineBar() {
+    // Canonical funnel stages per spec: Lead → Profiling → Engage → Onboarded.
     final stages = [
       ('Lead', 15, AppColors.stageNew),
+      ('Profiling', 8, AppColors.stageProfiling),
       ('Engage', 22, AppColors.stageEngage),
-      ('Opp.', 18, AppColors.stageOpportunity),
-      ('Profile', 8, AppColors.stageProfiling),
-      ('Client', 4, AppColors.stageClient),
+      ('Onboarded', 4, AppColors.stageClient),
     ];
     final total = stages.fold<int>(0, (sum, s) => sum + s.$2);
 

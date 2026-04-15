@@ -6,6 +6,7 @@ import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
@@ -280,7 +281,7 @@ class _LeadCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              lead.fullName,
+                              PiiDisplay.nameFor(lead.fullName, lead.consentStatus),
                               style: AppTextStyles.labelLarge.copyWith(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,

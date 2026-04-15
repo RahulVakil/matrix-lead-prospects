@@ -13,6 +13,127 @@ import '../cubit/leads_dashboard_cubit.dart';
 
 /// Leads Dashboard — production-grade home with visual funnel,
 /// prominent totals, dropped count, and action-today.
+/// Bottom-sheet chooser shown when the user taps the dashboard "+" FAB.
+/// Replaces the dedicated New Lead / IB Lead tiles to keep the dashboard
+/// uncluttered while still surfacing both create flows in one tap.
+void _showCreateChooser(BuildContext rootContext) {
+  showModalBottomSheet<void>(
+    context: rootContext,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => SafeArea(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderDefault,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Create new',
+              style: AppTextStyles.heading3.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 14),
+            _ChooserTile(
+              icon: Icons.person_add_alt_1,
+              color: AppColors.tealAccent,
+              label: 'New wealth lead',
+              caption: 'Capture an individual or family lead',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                rootContext.push('/leads/new');
+              },
+            ),
+            const SizedBox(height: 10),
+            _ChooserTile(
+              icon: Icons.business_center_outlined,
+              color: AppColors.stageOpportunity,
+              label: 'New IB lead',
+              caption: 'Capture an Investment Banking deal — auto-routed to Admin / MIS for review',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                rootContext.push('/ib-leads/new');
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ChooserTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String caption;
+  final VoidCallback onTap;
+  const _ChooserTile({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.caption,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceTertiary,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderDefault),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: AppTextStyles.labelLarge.copyWith(
+                        fontWeight: FontWeight.w700,
+                      )),
+                  Text(caption,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      )),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                size: 18, color: AppColors.textHint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class LeadsDashboardScreen extends StatelessWidget {
   final String? rmId;
   final String? rmName;
@@ -45,7 +166,7 @@ class LeadsDashboardScreen extends StatelessWidget {
             ),
             floatingActionButton: FloatingActionButton(
               backgroundColor: AppColors.navyPrimary,
-              onPressed: () => context.push('/leads/new'),
+              onPressed: () => _showCreateChooser(context),
               child: const Icon(Icons.add, color: Colors.white),
             ),
             body: state.isLoading
@@ -693,22 +814,18 @@ class _FunnelBar extends StatelessWidget {
 class _QuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 'New lead' and 'IB lead' creation now live behind the floating "+"
+    // chooser on the dashboard scaffold, so we don't duplicate them here.
     return Row(
       children: [
         _qa(Icons.people_alt_outlined, 'All leads', AppColors.navyPrimary,
             () => context.push(RouteNames.leads)),
         const SizedBox(width: 8),
-        _qa(Icons.person_add_alt_1, 'New lead', AppColors.tealAccent,
-            () => context.push('/leads/new')),
-        const SizedBox(width: 8),
         _qa(Icons.move_to_inbox_outlined, 'Get lead', AppColors.coldBlue,
             () => context.push('/get-lead')),
         const SizedBox(width: 8),
-        _qa(Icons.business_center_outlined, 'IB lead', AppColors.stageOpportunity,
-            () => context.push('/ib-leads/new')),
-        const SizedBox(width: 8),
         _qa(Icons.account_tree_outlined, 'My IB Leads', AppColors.navyPrimary,
-            () => context.push('/ib-leads/my')),
+            () => context.push('/ib-leads')),
       ],
     );
   }

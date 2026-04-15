@@ -54,7 +54,7 @@ class _IbCheckerQueueScreenState extends State<IbCheckerQueueScreen>
 
   @override
   Widget build(BuildContext context) {
-    final pending = _all.where((l) => l.status == IbLeadStatus.pending).toList();
+    final pending = _all.where((l) => l.status.isAwaitingReview).toList();
 
     return Scaffold(
       backgroundColor: AppColors.surfaceTertiary,
@@ -114,8 +114,9 @@ class _IbLeadCard extends StatelessWidget {
         IbLeadStatus.pending => AppColors.warmAmber,
         IbLeadStatus.approved => AppColors.successGreen,
         IbLeadStatus.sentBack => AppColors.errorRed,
-        IbLeadStatus.forwarded => AppColors.tealAccent,
-        IbLeadStatus.draft => AppColors.dormantGray,
+        IbLeadStatus.forwarded => AppColors.successGreen,
+        IbLeadStatus.draft => AppColors.warmAmber,
+        IbLeadStatus.dropped => AppColors.dormantGray,
       };
 
   @override

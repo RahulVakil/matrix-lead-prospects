@@ -12,7 +12,6 @@ import '../features/admin/presentation/pages/manage_pool_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
 import '../features/coverage/presentation/pages/coverage_check_screen.dart';
 import '../features/dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
-import '../features/ib_lead/presentation/pages/ib_checker_queue_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_capture_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_detail_screen.dart';
 import '../features/ib_lead/presentation/pages/my_ib_leads_screen.dart';
@@ -119,9 +118,11 @@ GoRouter createRouter(AuthCubit authCubit) {
         path: '/notifications',
         pageBuilder: (context, state) => _fadePage(const NotificationsScreen()),
       ),
+      // /ib-leads is the unified, role-aware IB Leads list. RM / TL / Admin /
+      // IB all land here; MyIbLeadsScreen branches on the current user role.
       GoRoute(
         path: '/ib-leads',
-        pageBuilder: (context, state) => _fadePage(const IbCheckerQueueScreen()),
+        pageBuilder: (context, state) => _fadePage(const MyIbLeadsScreen()),
       ),
       GoRoute(
         path: '/ib-leads/new',

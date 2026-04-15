@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import '../../../core/enums/ib_deal_type.dart';
 import '../../../core/models/coverage_check_result.dart';
+import '../../../core/models/ib_progress_update.dart';
 import '../../../core/models/key_contact_model.dart';
 
 class IbLeadFormState extends Equatable {
@@ -8,6 +9,12 @@ class IbLeadFormState extends Equatable {
   final String? clientCode;
   final String companyName;
   final List<KeyContactModel> contacts;
+  // ── New IB capture fields ─────────────────────────────────────────
+  final IbIndustry? industry;
+  final String industryOther;
+  final String websiteUrl;
+  final List<IbFinancialDoc> financialDocs;
+  // ──────────────────────────────────────────────────────────────────
   final IbDealType? dealType;
   final String dealTypeOtherText;
   final double? dealValue;
@@ -17,6 +24,7 @@ class IbLeadFormState extends Equatable {
   final List<IbIdentifiedHow> identifiedHow;
   final String notes;
   final bool isConfidential;
+  final String confidentialReason;
   final bool declarationAccepted;
 
   final bool isSubmitting;
@@ -32,6 +40,10 @@ class IbLeadFormState extends Equatable {
     this.clientCode,
     this.companyName = '',
     this.contacts = const [],
+    this.industry,
+    this.industryOther = '',
+    this.websiteUrl = '',
+    this.financialDocs = const [],
     this.dealType,
     this.dealTypeOtherText = '',
     this.dealValue,
@@ -41,6 +53,7 @@ class IbLeadFormState extends Equatable {
     this.identifiedHow = const [],
     this.notes = '',
     this.isConfidential = false,
+    this.confidentialReason = '',
     this.declarationAccepted = false,
     this.isSubmitting = false,
     this.submitError,
@@ -61,6 +74,11 @@ class IbLeadFormState extends Equatable {
     String? clientCode,
     String? companyName,
     List<KeyContactModel>? contacts,
+    IbIndustry? industry,
+    bool clearIndustry = false,
+    String? industryOther,
+    String? websiteUrl,
+    List<IbFinancialDoc>? financialDocs,
     IbDealType? dealType,
     String? dealTypeOtherText,
     double? dealValue,
@@ -74,6 +92,7 @@ class IbLeadFormState extends Equatable {
     List<IbIdentifiedHow>? identifiedHow,
     String? notes,
     bool? isConfidential,
+    String? confidentialReason,
     bool? declarationAccepted,
     bool? isSubmitting,
     String? submitError,
@@ -86,6 +105,10 @@ class IbLeadFormState extends Equatable {
       clientCode: clientCode ?? this.clientCode,
       companyName: companyName ?? this.companyName,
       contacts: contacts ?? this.contacts,
+      industry: clearIndustry ? null : (industry ?? this.industry),
+      industryOther: industryOther ?? this.industryOther,
+      websiteUrl: websiteUrl ?? this.websiteUrl,
+      financialDocs: financialDocs ?? this.financialDocs,
       dealType: dealType ?? this.dealType,
       dealTypeOtherText: dealTypeOtherText ?? this.dealTypeOtherText,
       dealValue: clearDealValue ? null : (dealValue ?? this.dealValue),
@@ -97,6 +120,7 @@ class IbLeadFormState extends Equatable {
       identifiedHow: identifiedHow ?? this.identifiedHow,
       notes: notes ?? this.notes,
       isConfidential: isConfidential ?? this.isConfidential,
+      confidentialReason: confidentialReason ?? this.confidentialReason,
       declarationAccepted: declarationAccepted ?? this.declarationAccepted,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       submitError: submitError,
@@ -112,6 +136,10 @@ class IbLeadFormState extends Equatable {
         clientCode,
         companyName,
         contacts.length,
+        industry,
+        industryOther,
+        websiteUrl,
+        financialDocs.length,
         dealType,
         dealTypeOtherText,
         dealValue,
@@ -121,6 +149,7 @@ class IbLeadFormState extends Equatable {
         identifiedHow,
         notes,
         isConfidential,
+        confidentialReason,
         declarationAccepted,
         isSubmitting,
         submitError,

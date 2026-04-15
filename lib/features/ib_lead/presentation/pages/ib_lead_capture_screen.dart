@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/ib_deal_type.dart';
 import '../../../../core/models/coverage_check_result.dart';
+import '../../../../core/models/ib_progress_update.dart';
 import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_chip.dart';
+import '../../../../core/widgets/compass_dropdown.dart';
 import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
@@ -68,63 +70,39 @@ class _CaptureBody extends ConsumerWidget {
     return HeroScaffold(
       header: HeroAppBar.simple(
         title: 'New IB lead',
-        subtitle: 'Goes to Branch Head for review',
+        subtitle: 'Goes to Admin / MIS for review',
       ),
       bottomBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: CompassButton.secondary(
-                  label: 'Save Draft',
-                  onPressed: state.isSubmitting
-                      ? null
-                      : () async {
-                          final saved = await notifier.saveDraft();
-                          if (saved != null && context.mounted) {
-                            showCompassSnack(
-                              context,
-                              message: 'Draft saved',
-                              type: CompassSnackType.success,
-                            );
-                            context.pop();
-                          }
-                        },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: CompassButton(
-                  label: 'Submit',
-                  isLoading: state.isSubmitting,
-                  onPressed: state.isReadyToSubmit
-                      ? () async {
-                          final saved = await notifier.submit();
-                          if (saved != null && context.mounted) {
-                            // Update parent lead's ibLeadIds if converting from a wealth lead
-                            if (parentLeadId != null) {
-                              try {
-                                final repo = getIt<LeadRepository>();
-                                final parent = await repo.getLeadById(parentLeadId!);
-                                await repo.updateLead(parent.copyWith(
-                                  ibLeadIds: [...parent.ibLeadIds, saved.id],
-                                  ibConvertedAt: DateTime.now(),
-                                ));
-                              } catch (_) {}
-                            }
-                            showCompassSnack(
-                              context,
-                              message: 'Sent to Branch Head for review',
-                              type: CompassSnackType.success,
-                            );
-                            context.pop();
-                          }
-                        }
-                      : null,
-                ),
-              ),
-            ],
+          child: CompassButton(
+            label: 'Create IB Lead',
+            isLoading: state.isSubmitting,
+            onPressed: state.isReadyToSubmit
+                ? () async {
+                    final saved = await notifier.submit();
+                    if (saved != null && context.mounted) {
+                      // Update parent lead's ibLeadIds if converting from a wealth lead
+                      if (parentLeadId != null) {
+                        try {
+                          final repo = getIt<LeadRepository>();
+                          final parent = await repo.getLeadById(parentLeadId!);
+                          await repo.updateLead(parent.copyWith(
+                            ibLeadIds: [...parent.ibLeadIds, saved.id],
+                            ibConvertedAt: DateTime.now(),
+                          ));
+                        } catch (_) {}
+                      }
+                      showCompassSnack(
+                        context,
+                        message:
+                            'IB lead created — under Admin / MIS review',
+                        type: CompassSnackType.success,
+                      );
+                      context.pop();
+                    }
+                  }
+                : null,
           ),
         ),
       ),
@@ -172,6 +150,44 @@ class _CaptureBody extends ConsumerWidget {
           ),
 
           const SizedBox(height: 24),
+          const CompassSectionHeader(title: 'Company Details'),
+          const SizedBox(height: 12),
+          Text('Industry', style: AppTextStyles.labelSmall),
+          const SizedBox(height: 8),
+          CompassDropdown<IbIndustry>(
+            label: 'Industry / sector',
+            value: state.industry,
+            hint: 'Select an industry',
+            items: IbIndustry.values
+                .map((i) => CompassDropdownItem(value: i, label: i.label))
+                .toList(),
+            onChanged: notifier.setIndustry,
+          ),
+          if (state.industry == IbIndustry.other) ...[
+            const SizedBox(height: 10),
+            CompassTextField(
+              label: 'Specify industry',
+              isRequired: true,
+              initialValue: state.industryOther,
+              onChanged: notifier.setIndustryOther,
+            ),
+          ],
+          const SizedBox(height: 12),
+          CompassTextField(
+            label: 'Website URL',
+            hint: 'https://example.com',
+            initialValue: state.websiteUrl,
+            prefixIcon: Icons.link,
+            onChanged: notifier.setWebsiteUrl,
+          ),
+          const SizedBox(height: 16),
+          _CompanyFinancialField(
+            docs: state.financialDocs,
+            onAdd: notifier.addFinancialDoc,
+            onRemove: notifier.removeFinancialDoc,
+          ),
+
+          const SizedBox(height: 24),
           const CompassSectionHeader(title: 'Deal Details'),
           const SizedBox(height: 12),
           Text('Type of deal *', style: AppTextStyles.labelSmall),
@@ -200,21 +216,9 @@ class _CaptureBody extends ConsumerWidget {
             ),
           ],
           const SizedBox(height: 16),
-          Text('Potential deal value *', style: AppTextStyles.labelSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: IbDealValueRange.values
-                .map(
-                  (r) => CompassChoiceChip<IbDealValueRange>(
-                    value: r,
-                    groupValue: state.dealValueRange,
-                    label: r.label,
-                    onSelected: notifier.setDealValueRange,
-                  ),
-                )
-                .toList(),
+          _DealValueField(
+            valueRupees: state.dealValue,
+            onChange: notifier.setDealValue,
           ),
 
           const SizedBox(height: 16),
@@ -267,17 +271,12 @@ class _CaptureBody extends ConsumerWidget {
             maxLength: 500,
             onChanged: notifier.setNotes,
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Switch(
-                value: state.isConfidential,
-                activeThumbColor: AppColors.errorRedAlt,
-                onChanged: notifier.setConfidential,
-              ),
-              const SizedBox(width: 8),
-              Text('Mark as Confidential', style: AppTextStyles.bodyMedium),
-            ],
+          const SizedBox(height: 16),
+          _ConfidentialBlock(
+            isConfidential: state.isConfidential,
+            reason: state.confidentialReason,
+            onToggle: notifier.setConfidential,
+            onReasonChanged: notifier.setConfidentialReason,
           ),
 
           const SizedBox(height: 24),
@@ -576,6 +575,412 @@ class _TimelineSlider extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Deal Value field — 3 chips that pre-fill a manual entry field
+// ────────────────────────────────────────────────────────────────────
+
+class _DealValueField extends StatefulWidget {
+  /// Stored value in INR (rupees). Capture form deals in Cr for input.
+  final double? valueRupees;
+  final ValueChanged<double?> onChange;
+  const _DealValueField({required this.valueRupees, required this.onChange});
+
+  @override
+  State<_DealValueField> createState() => _DealValueFieldState();
+}
+
+class _DealValueFieldState extends State<_DealValueField> {
+  late TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: _toCrText(widget.valueRupees));
+  }
+
+  @override
+  void didUpdateWidget(covariant _DealValueField old) {
+    super.didUpdateWidget(old);
+    final newText = _toCrText(widget.valueRupees);
+    if (newText != _ctrl.text) {
+      _ctrl.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: newText.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  static String _toCrText(double? rupees) {
+    if (rupees == null) return '';
+    final cr = rupees / 1e7;
+    if (cr == cr.roundToDouble()) return cr.toStringAsFixed(0);
+    return cr.toStringAsFixed(2);
+  }
+
+  IbDealSizeBucket? _activeBucket() {
+    if (widget.valueRupees == null) return null;
+    return IbDealSizeBucket.fromCr(widget.valueRupees! / 1e7);
+  }
+
+  bool get _showHighWarning {
+    final v = widget.valueRupees;
+    return v != null && (v / 1e7) > 5000;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _activeBucket();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Potential deal value *', style: AppTextStyles.labelSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: IbDealSizeBucket.values
+              .map(
+                (b) => CompassChoiceChip<IbDealSizeBucket>(
+                  value: b,
+                  groupValue: active,
+                  label: b.label,
+                  onSelected: (bucket) {
+                    final cr = bucket.prefillCr;
+                    widget.onChange(cr * 1e7);
+                  },
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _ctrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Or enter exact deal value (₹ Cr)',
+                  hintText: 'e.g. 250',
+                  filled: true,
+                  fillColor: AppColors.surfaceTertiary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.borderDefault),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.borderDefault),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                        color: AppColors.navyPrimary, width: 1.5),
+                  ),
+                ),
+                onChanged: (v) {
+                  final raw = v.trim();
+                  if (raw.isEmpty) {
+                    widget.onChange(null);
+                    return;
+                  }
+                  final cr = double.tryParse(raw);
+                  if (cr == null || cr < 0) return;
+                  widget.onChange(cr * 1e7);
+                },
+              ),
+            ),
+          ],
+        ),
+        if (_showHighWarning) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Note: ₹5,000 Cr+ — please double-check the figure.',
+            style: AppTextStyles.caption.copyWith(color: AppColors.warmAmber),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Company Financial — multi-file uploader (mocked storage)
+// PDF / XLSX / DOCX / images, max 5 files, 10 MB each (validation TODO).
+// ────────────────────────────────────────────────────────────────────
+
+class _CompanyFinancialField extends StatelessWidget {
+  final List<IbFinancialDoc> docs;
+  final ValueChanged<IbFinancialDoc> onAdd;
+  final ValueChanged<String> onRemove;
+
+  const _CompanyFinancialField({
+    required this.docs,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  static const _allowed = ['PDF', 'XLSX', 'DOCX', 'JPG', 'PNG'];
+
+  Future<void> _pickMock(BuildContext context) async {
+    if (docs.length >= 5) {
+      showCompassSnack(context,
+          message: 'Max 5 files', type: CompassSnackType.warn);
+      return;
+    }
+    // Mocked picker: prototype only. In production wire to file_picker package
+    // and stream to backend storage (e.g. Supabase / S3).
+    final sampleNames = [
+      'Annual_Report_FY24.pdf',
+      'Financial_Summary_FY24.xlsx',
+      'Investor_Deck.pdf',
+      'Audited_Statements.pdf',
+      'Cap_Table.xlsx',
+    ];
+    final next = sampleNames[docs.length % sampleNames.length];
+    final ext = next.split('.').last.toUpperCase();
+    final mime = ext == 'PDF'
+        ? 'application/pdf'
+        : ext == 'XLSX'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : ext == 'DOCX'
+                ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                : 'image/jpeg';
+    onAdd(IbFinancialDoc(
+      id: 'DOC_${DateTime.now().microsecondsSinceEpoch}',
+      fileName: next,
+      mimeType: mime,
+      sizeBytes: 380000 + docs.length * 14000,
+      uploadedAt: DateTime.now(),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Company Financial', style: AppTextStyles.labelSmall),
+        const SizedBox(height: 4),
+        Text(
+          'Attach annual report, audited statements, financial summary etc. '
+          '${_allowed.join(' / ')} • Max 5 files • 10 MB each',
+          style:
+              AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 10),
+        if (docs.isEmpty)
+          GestureDetector(
+            onTap: () => _pickMock(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceTertiary,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.borderDefault,
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.cloud_upload_outlined,
+                      color: AppColors.navyPrimary),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap to add file',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.navyPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else ...[
+          ...docs.map(
+            (d) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfacePrimary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.borderDefault),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.insert_drive_file_outlined,
+                        size: 18, color: AppColors.navyPrimary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            d.fileName,
+                            style: AppTextStyles.bodySmall
+                                .copyWith(fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            d.sizeLabel,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textHint,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      tooltip: 'Remove',
+                      onPressed: () => onRemove(d.id),
+                      splashRadius: 16,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (docs.length < 5)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _pickMock(context),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add another file'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.navyPrimary,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Confidential block — toggle + reason + explanation of what it restricts
+// ────────────────────────────────────────────────────────────────────
+
+class _ConfidentialBlock extends StatelessWidget {
+  final bool isConfidential;
+  final String reason;
+  final ValueChanged<bool> onToggle;
+  final ValueChanged<String> onReasonChanged;
+
+  const _ConfidentialBlock({
+    required this.isConfidential,
+    required this.reason,
+    required this.onToggle,
+    required this.onReasonChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.errorRed;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: isConfidential
+            ? accent.withValues(alpha: 0.06)
+            : AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isConfidential
+              ? accent.withValues(alpha: 0.4)
+              : AppColors.borderDefault,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isConfidential ? Icons.lock : Icons.lock_outline,
+                size: 18,
+                color: isConfidential ? accent : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Mark as Confidential',
+                  style: AppTextStyles.labelLarge.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isConfidential ? accent : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Switch(
+                value: isConfidential,
+                activeThumbColor: accent,
+                onChanged: onToggle,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Hides company name + key contacts from the MIS / Sonia / Suraj '
+            'review queue and the IB team until the lead is assigned. '
+            'Identifying details remain visible to you and your Team Lead.',
+            style:
+                AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+          ),
+          if (isConfidential) ...[
+            const SizedBox(height: 12),
+            TextField(
+              maxLines: 2,
+              maxLength: 200,
+              onChanged: onReasonChanged,
+              controller: TextEditingController(text: reason)
+                ..selection =
+                    TextSelection.collapsed(offset: reason.length),
+              decoration: InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'e.g. Pre-IPO sensitivity, related-party concern…',
+                filled: true,
+                fillColor: AppColors.surfacePrimary,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: AppColors.borderDefault),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: AppColors.borderDefault),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: accent.withValues(alpha: 0.6), width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

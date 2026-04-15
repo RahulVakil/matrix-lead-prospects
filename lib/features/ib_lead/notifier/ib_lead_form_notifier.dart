@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/ib_deal_type.dart';
 import '../../../core/models/ib_lead_model.dart';
+import '../../../core/models/ib_progress_update.dart';
 import '../../../core/models/key_contact_model.dart';
 import '../../../core/models/notification_model.dart';
 import '../../../core/repositories/coverage_repository.dart';
@@ -99,7 +100,26 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
 
   void setNotes(String v) => state = state.copyWith(notes: v);
   void setConfidential(bool v) => state = state.copyWith(isConfidential: v);
+  void setConfidentialReason(String v) =>
+      state = state.copyWith(confidentialReason: v);
   void setDeclaration(bool v) => state = state.copyWith(declarationAccepted: v);
+
+  void setIndustry(IbIndustry? v) => state = state.copyWith(
+        industry: v,
+        clearIndustry: v == null,
+      );
+  void setIndustryOther(String v) => state = state.copyWith(industryOther: v);
+  void setWebsiteUrl(String v) => state = state.copyWith(websiteUrl: v);
+
+  void addFinancialDoc(IbFinancialDoc doc) {
+    final next = [...state.financialDocs, doc];
+    state = state.copyWith(financialDocs: next);
+  }
+
+  void removeFinancialDoc(String id) {
+    final next = state.financialDocs.where((d) => d.id != id).toList();
+    state = state.copyWith(financialDocs: next);
+  }
 
   Future<IbLeadModel?> saveDraft() async {
     if (state.companyName.trim().isEmpty || state.dealType == null) {
@@ -126,6 +146,13 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
         clientCode: state.clientCode,
         companyName: state.companyName.trim(),
         contacts: state.contacts.where((c) => !c.isEmpty).toList(),
+        industry: state.industry,
+        industryOther: state.industry == IbIndustry.other
+            ? state.industryOther.trim()
+            : null,
+        websiteUrl:
+            state.websiteUrl.trim().isEmpty ? null : state.websiteUrl.trim(),
+        financialDocs: state.financialDocs,
         dealType: state.dealType!,
         dealTypeOtherText: state.dealType == IbDealType.other
             ? state.dealTypeOtherText.trim()
@@ -137,6 +164,9 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
         identifiedHow: state.identifiedHow,
         notes: state.notes.trim().isEmpty ? null : state.notes.trim(),
         isConfidential: state.isConfidential,
+        confidentialReason: state.confidentialReason.trim().isEmpty
+            ? null
+            : state.confidentialReason.trim(),
         declarationAccepted: state.declarationAccepted,
         status: submit ? IbLeadStatus.pending : IbLeadStatus.draft,
         createdById: createdById,
