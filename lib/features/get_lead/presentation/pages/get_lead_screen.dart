@@ -314,7 +314,7 @@ class _RequestForm extends StatelessWidget {
                         showCompassSnack(
                           context,
                           message:
-                              '${claimed.length} lead${claimed.length == 1 ? '' : 's'} claimed',
+                              'Lead${claimed.length == 1 ? '' : 's'} #${claimed.map((l) => l.id).join(', #')} claimed. View in All Leads.',
                           type: CompassSnackType.success,
                         );
                       }

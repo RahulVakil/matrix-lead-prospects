@@ -140,17 +140,17 @@ class IbLeadModel {
   int get daysSinceLastProgress =>
       DateTime.now().difference(_lastProgressRef).inDays;
 
-  /// True when the lead is approved + the RM owes a weekly status update (>7 days).
+  /// True when the lead is approved + the RM owes a status update (>30 days).
   bool get isProgressOverdue {
     if (!status.isApproved) return false;
-    return daysSinceLastProgress > 7;
+    return daysSinceLastProgress > 30;
   }
 
-  /// True when the escalation threshold is breached (>9 days = 7+2).
+  /// True when the escalation threshold is breached (>32 days = 30+2).
   /// At this point TL + IB SPOC should be notified.
   bool get isProgressEscalated {
     if (!status.isApproved) return false;
-    return daysSinceLastProgress > 9;
+    return daysSinceLastProgress > 32;
   }
 
   IbProgressStatus? get latestProgressStatus =>

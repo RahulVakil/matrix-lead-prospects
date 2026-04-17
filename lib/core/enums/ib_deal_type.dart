@@ -120,7 +120,7 @@ enum IbDealSizeBucket {
 }
 
 /// IB Status Tracking enum — hardcoded per spec. 5 values only.
-/// Reminder cadence: weekly (7 days); escalation at day 9.
+/// Reminder cadence: 30 days; escalation at day 32 (30+2).
 enum IbProgressStatus {
   inDiscussion('In Discussion'),
   proposalSent('Proposal Sent'),

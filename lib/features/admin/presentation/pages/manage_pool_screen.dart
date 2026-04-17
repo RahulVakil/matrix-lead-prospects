@@ -204,122 +204,243 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
 // Tab 1: Assign leads
 // ────────────────────────────────────────────────────────────────────
 
-class _AssignTab extends StatelessWidget {
+class _AssignTab extends StatefulWidget {
   final List<LeadModel> poolLeads;
   final void Function(LeadModel lead, String rmId, String rmName) onAssign;
 
   const _AssignTab({required this.poolLeads, required this.onAssign});
 
   @override
+  State<_AssignTab> createState() => _AssignTabState();
+}
+
+class _AssignTabState extends State<_AssignTab> {
+  final Set<String> _selected = {};
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      if (_selected.length == widget.poolLeads.length) {
+        _selected.clear();
+      } else {
+        _selected.addAll(widget.poolLeads.map((l) => l.id));
+      }
+    });
+  }
+
+  void _showAssignSheet() {
+    if (_selected.isEmpty) return;
+    final rms = MockDataGenerators.allRMs;
+    final selectedLeads =
+        widget.poolLeads.where((l) => _selected.contains(l.id)).toList();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Assign ${selectedLeads.length} lead${selectedLeads.length == 1 ? '' : 's'} to RM',
+                  style: AppTextStyles.heading3
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxHeight:
+                          MediaQuery.of(context).size.height * 0.4),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: rms
+                        .map((rm) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                radius: 18,
+                                backgroundColor:
+                                    const Color(0xFFDBEAFE),
+                                child: Text(rm.initials,
+                                    style: AppTextStyles.caption
+                                        .copyWith(
+                                            color:
+                                                AppColors.navyPrimary,
+                                            fontWeight:
+                                                FontWeight.w700)),
+                              ),
+                              title: Text(rm.name,
+                                  style: AppTextStyles.bodyMedium
+                                      .copyWith(
+                                          fontWeight:
+                                              FontWeight.w600)),
+                              subtitle: Text(
+                                  rm.designation ?? '',
+                                  style: AppTextStyles.caption),
+                              onTap: () {
+                                Navigator.pop(sheetCtx);
+                                for (final lead in selectedLeads) {
+                                  widget.onAssign(
+                                      lead, rm.id, rm.name);
+                                }
+                                setState(() => _selected.clear());
+                              },
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (poolLeads.isEmpty) {
+    if (widget.poolLeads.isEmpty) {
       return const CompassEmptyState(
         icon: Icons.inventory_2_outlined,
         title: 'Pool is empty',
         subtitle: 'No unassigned leads available',
       );
     }
-    final rms = MockDataGenerators.allRMs;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: poolLeads.length,
-      itemBuilder: (_, i) {
-        final lead = poolLeads[i];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surfacePrimary,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        // Selection toolbar
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      lead.fullName,
-                      style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              InkWell(
+                onTap: _selectAll,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _selected.length == widget.poolLeads.length
+                          ? Icons.check_box
+                          : _selected.isEmpty
+                              ? Icons.check_box_outline_blank
+                              : Icons.indeterminate_check_box,
+                      size: 20,
+                      color: AppColors.navyPrimary,
                     ),
-                  ),
-                  Text(
-                    lead.source.label,
-                    style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${lead.vertical} · ${lead.aumDisplay}',
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 36,
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
-                        ),
-                        child: SafeArea(
-                          top: false,
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Assign to RM', style: AppTextStyles.heading3.copyWith(fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 14),
-                                ConstrainedBox(
-                                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-                                  child: ListView(
-                                    shrinkWrap: true,
-                                    children: rms.map((rm) => ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: CircleAvatar(
-                                        radius: 18,
-                                        backgroundColor: const Color(0xFFDBEAFE),
-                                        child: Text(rm.initials, style: AppTextStyles.caption.copyWith(color: AppColors.navyPrimary, fontWeight: FontWeight.w700)),
-                                      ),
-                                      title: Text(rm.name, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-                                      subtitle: Text(rm.designation ?? '', style: AppTextStyles.caption),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        onAssign(lead, rm.id, rm.name);
-                                      },
-                                    )).toList(),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _selected.isEmpty
+                          ? 'Select leads'
+                          : '${_selected.length} selected',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.navyPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
-                    );
-                  },
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (_selected.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: _showAssignSheet,
+                  icon: const Icon(Icons.person_add_alt_1, size: 16),
+                  label: Text('Assign ${_selected.length}'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.navyPrimary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Assign to...', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
-              ),
             ],
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 96),
+            itemCount: widget.poolLeads.length,
+            itemBuilder: (_, i) {
+              final lead = widget.poolLeads[i];
+              final isChecked = _selected.contains(lead.id);
+              return InkWell(
+                onTap: () => _toggleSelection(lead.id),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isChecked
+                        ? AppColors.navyPrimary.withValues(alpha: 0.06)
+                        : AppColors.surfacePrimary,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isChecked
+                          ? AppColors.navyPrimary.withValues(alpha: 0.4)
+                          : AppColors.borderDefault
+                              .withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isChecked
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        size: 20,
+                        color: isChecked
+                            ? AppColors.navyPrimary
+                            : AppColors.textHint,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              lead.fullName,
+                              style: AppTextStyles.labelLarge
+                                  .copyWith(
+                                      fontWeight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${lead.vertical} · ${lead.source.label}',
+                              style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.textHint),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

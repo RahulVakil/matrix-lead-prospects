@@ -81,7 +81,7 @@ class MockIbLeadRepository implements IbLeadRepository {
     // ── Scenario E — IB-tagged client (blocks duplicate IB creation)
     // This lead is "active" so creating another for Vikram Bajaj should be blocked.
 
-    // ── Scenario H — Approved 5 days ago, never updated (amber flag ready at day 7)
+    // ── Scenario H — Approved 25 days ago, never updated (approaching 30-day overdue)
     _put(IbLeadModel(
       id: 'IBL_H',
       clientName: 'Suresh Patel',
@@ -105,14 +105,14 @@ class MockIbLeadRepository implements IbLeadRepository {
       branchHeadName: 'Sonia Parekh',
       assignedIbRmId: 'IB001',
       assignedIbRmName: 'Siddharth Kapoor',
-      assignedAt: now.subtract(const Duration(days: 5)),
+      assignedAt: now.subtract(const Duration(days: 25)),
       assignmentCcList: const ['pe-coverage@jmfs.in', 'head.ib@jmfs.in'],
-      createdAt: now.subtract(const Duration(days: 12)),
-      submittedAt: now.subtract(const Duration(days: 12)),
-      decidedAt: now.subtract(const Duration(days: 5)),
+      createdAt: now.subtract(const Duration(days: 35)),
+      submittedAt: now.subtract(const Duration(days: 35)),
+      decidedAt: now.subtract(const Duration(days: 25)),
     ));
 
-    // ── Scenario I — Approved 8 days ago, never updated (overdue, RM flagged)
+    // ── Scenario I — Approved 31 days ago, never updated (overdue, RM flagged)
     _put(IbLeadModel(
       id: 'IBL_I',
       clientName: 'Kavita Deshmukh',
@@ -136,14 +136,14 @@ class MockIbLeadRepository implements IbLeadRepository {
       branchHeadName: 'Sonia Parekh',
       assignedIbRmId: 'IB002',
       assignedIbRmName: 'Riya Tandon',
-      assignedAt: now.subtract(const Duration(days: 8)),
+      assignedAt: now.subtract(const Duration(days: 31)),
       assignmentCcList: const ['dcm-desk@jmfs.in'],
-      createdAt: now.subtract(const Duration(days: 15)),
-      submittedAt: now.subtract(const Duration(days: 15)),
-      decidedAt: now.subtract(const Duration(days: 8)),
+      createdAt: now.subtract(const Duration(days: 40)),
+      submittedAt: now.subtract(const Duration(days: 40)),
+      decidedAt: now.subtract(const Duration(days: 31)),
     ));
 
-    // ── Scenario J — Approved 10 days ago, never updated (escalated to TL + IB SPOC)
+    // ── Scenario J — Approved 35 days ago, never updated (escalated to TL + IB SPOC)
     _put(IbLeadModel(
       id: 'IBL_J',
       companyName: 'Nexus Pharma Ltd',
@@ -167,11 +167,11 @@ class MockIbLeadRepository implements IbLeadRepository {
       branchHeadName: 'Sonia Parekh',
       assignedIbRmId: 'IB001',
       assignedIbRmName: 'Siddharth Kapoor',
-      assignedAt: now.subtract(const Duration(days: 10)),
+      assignedAt: now.subtract(const Duration(days: 35)),
       assignmentCcList: const ['structured@jmfs.in', 'head.ib@jmfs.in'],
-      createdAt: now.subtract(const Duration(days: 20)),
-      submittedAt: now.subtract(const Duration(days: 20)),
-      decidedAt: now.subtract(const Duration(days: 10)),
+      createdAt: now.subtract(const Duration(days: 45)),
+      submittedAt: now.subtract(const Duration(days: 45)),
+      decidedAt: now.subtract(const Duration(days: 35)),
     ));
 
     // ── Scenario K — IB lead with 4 status updates (timeline demo)

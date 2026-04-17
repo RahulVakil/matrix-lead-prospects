@@ -13,6 +13,7 @@ class LeadInboxState extends Equatable {
   final int totalCount;
   final LeadStage? stageFilter;
   final bool ibLinkedOnly;
+  final bool myLeadsOnly;
   final String? sortBy;
   final String? searchQuery;
   final int page;
@@ -24,6 +25,7 @@ class LeadInboxState extends Equatable {
     this.totalCount = 0,
     this.stageFilter,
     this.ibLinkedOnly = false,
+    this.myLeadsOnly = false,
     this.sortBy = 'name',
     this.searchQuery,
     this.page = 1,
@@ -37,6 +39,7 @@ class LeadInboxState extends Equatable {
     LeadStage? stageFilter,
     bool clearStageFilter = false,
     bool? ibLinkedOnly,
+    bool? myLeadsOnly,
     String? sortBy,
     String? searchQuery,
     bool clearSearchQuery = false,
@@ -50,6 +53,7 @@ class LeadInboxState extends Equatable {
       stageFilter:
           clearStageFilter ? null : (stageFilter ?? this.stageFilter),
       ibLinkedOnly: ibLinkedOnly ?? this.ibLinkedOnly,
+      myLeadsOnly: myLeadsOnly ?? this.myLeadsOnly,
       sortBy: sortBy ?? this.sortBy,
       searchQuery:
           clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
@@ -65,6 +69,7 @@ class LeadInboxState extends Equatable {
         totalCount,
         stageFilter,
         ibLinkedOnly,
+        myLeadsOnly,
         sortBy,
         searchQuery,
         page,
@@ -100,9 +105,11 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
       );
 
       var items = result.items;
-      // Client-side IB-linked filter (repo doesn't have this gate).
       if (state.ibLinkedOnly) {
         items = items.where((l) => l.ibLeadIds.isNotEmpty).toList();
+      }
+      if (state.myLeadsOnly) {
+        items = items.where((l) => l.assignedRmId == rmId).toList();
       }
 
       emit(state.copyWith(
@@ -126,6 +133,11 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
 
   void setIbLinkedOnly(bool v) {
     emit(state.copyWith(ibLinkedOnly: v, page: 1));
+    loadLeads(refresh: true);
+  }
+
+  void setMyLeadsOnly(bool v) {
+    emit(state.copyWith(myLeadsOnly: v, page: 1));
     loadLeads(refresh: true);
   }
 

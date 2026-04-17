@@ -74,7 +74,8 @@ class _InboxBodyState extends State<_InboxBody> {
         final cubit = context.read<LeadInboxCubit>();
         final activeFilterCount =
             (state.stageFilter != null ? 1 : 0) +
-            (state.ibLinkedOnly ? 1 : 0);
+            (state.ibLinkedOnly ? 1 : 0) +
+            (state.myLeadsOnly ? 1 : 0);
 
         return HeroScaffold(
           header: HeroAppBar.simple(
@@ -266,9 +267,12 @@ class _InboxBodyState extends State<_InboxBody> {
       builder: (_) => _FilterSheetBody(
         initialStage: state.stageFilter,
         initialIbOnly: state.ibLinkedOnly,
-        onApply: (stage, ibOnly) {
+        initialMyOnly: state.myLeadsOnly,
+        showMyLeadsToggle: context.read<AuthCubit>().state.currentUser?.role == UserRole.teamLead,
+        onApply: (stage, ibOnly, myOnly) {
           cubit.setStageFilter(stage);
           cubit.setIbLinkedOnly(ibOnly);
+          cubit.setMyLeadsOnly(myOnly);
         },
       ),
     );
@@ -278,11 +282,15 @@ class _InboxBodyState extends State<_InboxBody> {
 class _FilterSheetBody extends StatefulWidget {
   final LeadStage? initialStage;
   final bool initialIbOnly;
-  final void Function(LeadStage? stage, bool ibOnly) onApply;
+  final bool initialMyOnly;
+  final bool showMyLeadsToggle;
+  final void Function(LeadStage? stage, bool ibOnly, bool myOnly) onApply;
 
   const _FilterSheetBody({
     required this.initialStage,
     required this.initialIbOnly,
+    required this.initialMyOnly,
+    required this.showMyLeadsToggle,
     required this.onApply,
   });
 
@@ -293,12 +301,14 @@ class _FilterSheetBody extends StatefulWidget {
 class _FilterSheetBodyState extends State<_FilterSheetBody> {
   late LeadStage? _stageF;
   late bool _ibOnly;
+  late bool _myOnly;
 
   @override
   void initState() {
     super.initState();
     _stageF = widget.initialStage;
     _ibOnly = widget.initialIbOnly;
+    _myOnly = widget.initialMyOnly;
   }
 
   static final _stages = [
@@ -340,6 +350,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                   onPressed: () => setState(() {
                     _stageF = null;
                     _ibOnly = false;
+                    _myOnly = false;
                   }),
                   child: const Text('Clear all'),
                 ),
@@ -383,6 +394,22 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                 ),
               ],
             ),
+            if (widget.showMyLeadsToggle) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Show only my leads',
+                        style: AppTextStyles.bodySmall),
+                  ),
+                  Switch(
+                    value: _myOnly,
+                    activeColor: AppColors.navyPrimary,
+                    onChanged: (v) => setState(() => _myOnly = v),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -395,7 +422,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                       borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
-                  widget.onApply(_stageF, _ibOnly);
+                  widget.onApply(_stageF, _ibOnly, _myOnly);
                   Navigator.of(context).pop();
                 },
                 child: const Text('Apply'),

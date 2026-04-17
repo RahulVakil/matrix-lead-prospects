@@ -646,7 +646,7 @@ class _OverdueBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'Status update overdue — $days days since last update. '
-              'Update now to stay compliant with the 7-day cycle.',
+              'Update now to stay compliant with the 30-day cycle.',
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.errorRed,
                 fontWeight: FontWeight.w600,
@@ -898,11 +898,11 @@ class _ProgressCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CompassSectionHeader(title: 'Status updates (weekly cycle)'),
+          const CompassSectionHeader(title: 'Status updates (30-day cycle)'),
           const SizedBox(height: 6),
           if (lead.progressUpdates.isEmpty)
             Text(
-              'No updates yet. The RM owes a first update within 7 days of assignment.',
+              'No updates yet. The RM owes a first update within 30 days of assignment.',
               style: AppTextStyles.caption
                   .copyWith(color: AppColors.textSecondary),
             )
