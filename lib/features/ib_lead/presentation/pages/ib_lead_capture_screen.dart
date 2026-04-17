@@ -271,13 +271,6 @@ class _CaptureBody extends ConsumerWidget {
             maxLength: 500,
             onChanged: notifier.setNotes,
           ),
-          const SizedBox(height: 16),
-          _ConfidentialBlock(
-            isConfidential: state.isConfidential,
-            reason: state.confidentialReason,
-            onToggle: notifier.setConfidential,
-            onReasonChanged: notifier.setConfidentialReason,
-          ),
 
           const SizedBox(height: 24),
           const CompassSectionHeader(title: 'Declaration'),

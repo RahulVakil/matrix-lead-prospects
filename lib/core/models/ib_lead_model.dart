@@ -1,5 +1,6 @@
 import '../enums/ib_deal_type.dart';
 import 'ib_progress_update.dart';
+import 'ib_remark_entry.dart';
 import 'key_contact_model.dart';
 
 class IbLeadModel {
@@ -40,6 +41,8 @@ class IbLeadModel {
   /// CC list captured at the time of assignment (e.g. for the auto email).
   /// Mock-only: stored on the model so it surfaces on the detail screen.
   final List<String> assignmentCcList;
+  // ── Sent-back / resubmit conversation thread ──────────────────────
+  final List<IbRemarkEntry> remarkThread;
   // ── 30-day cycle ──────────────────────────────────────────────────
   final List<IbProgressUpdate> progressUpdates;
   // ──────────────────────────────────────────────────────────────────
@@ -78,6 +81,7 @@ class IbLeadModel {
     this.assignedIbRmName,
     this.assignedAt,
     this.assignmentCcList = const [],
+    this.remarkThread = const [],
     this.progressUpdates = const [],
     required this.createdAt,
     this.submittedAt,
@@ -125,22 +129,28 @@ class IbLeadModel {
     return IbLeadTemperature.cold;
   }
 
-  /// True when the lead has been approved + assigned and the RM owes a
-  /// status update (>30 days since the most recent update / assignment).
-  bool get isProgressOverdue {
-    if (!status.isApproved || assignedAt == null) return false;
-    final last = progressUpdates.isNotEmpty
-        ? progressUpdates.last.createdAt
-        : assignedAt!;
-    return DateTime.now().difference(last).inDays > 30;
+  /// Reference timestamp for the weekly reminder clock:
+  /// MAX(createdAt, lastStatusUpdateAt) — whichever is later resets the clock.
+  DateTime get _lastProgressRef {
+    if (progressUpdates.isNotEmpty) return progressUpdates.last.createdAt;
+    if (assignedAt != null) return assignedAt!;
+    return createdAt;
   }
 
-  int get daysSinceLastProgress {
-    if (assignedAt == null) return 0;
-    final last = progressUpdates.isNotEmpty
-        ? progressUpdates.last.createdAt
-        : assignedAt!;
-    return DateTime.now().difference(last).inDays;
+  int get daysSinceLastProgress =>
+      DateTime.now().difference(_lastProgressRef).inDays;
+
+  /// True when the lead is approved + the RM owes a weekly status update (>7 days).
+  bool get isProgressOverdue {
+    if (!status.isApproved) return false;
+    return daysSinceLastProgress > 7;
+  }
+
+  /// True when the escalation threshold is breached (>9 days = 7+2).
+  /// At this point TL + IB SPOC should be notified.
+  bool get isProgressEscalated {
+    if (!status.isApproved) return false;
+    return daysSinceLastProgress > 9;
   }
 
   IbProgressStatus? get latestProgressStatus =>
@@ -175,6 +185,7 @@ class IbLeadModel {
     String? assignedIbRmName,
     DateTime? assignedAt,
     List<String>? assignmentCcList,
+    List<IbRemarkEntry>? remarkThread,
     List<IbProgressUpdate>? progressUpdates,
     DateTime? submittedAt,
     DateTime? decidedAt,
@@ -210,6 +221,7 @@ class IbLeadModel {
       assignedIbRmName: assignedIbRmName ?? this.assignedIbRmName,
       assignedAt: assignedAt ?? this.assignedAt,
       assignmentCcList: assignmentCcList ?? this.assignmentCcList,
+      remarkThread: remarkThread ?? this.remarkThread,
       progressUpdates: progressUpdates ?? this.progressUpdates,
       createdAt: createdAt,
       submittedAt: submittedAt ?? this.submittedAt,

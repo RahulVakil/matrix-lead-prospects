@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/lead_stage.dart';
-import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/lead_repository.dart';
 
@@ -12,57 +11,50 @@ class LeadInboxState extends Equatable {
   final bool isLoading;
   final List<LeadModel> leads;
   final int totalCount;
-  final LeadTemperature? temperatureFilter;
   final LeadStage? stageFilter;
+  final bool ibLinkedOnly;
   final String? sortBy;
   final String? searchQuery;
   final int page;
   final String? error;
-  final Map<LeadTemperature, int> temperatureCounts;
 
   const LeadInboxState({
     this.isLoading = true,
     this.leads = const [],
     this.totalCount = 0,
-    this.temperatureFilter,
     this.stageFilter,
+    this.ibLinkedOnly = false,
     this.sortBy = 'name',
     this.searchQuery,
     this.page = 1,
     this.error,
-    this.temperatureCounts = const {},
   });
 
   LeadInboxState copyWith({
     bool? isLoading,
     List<LeadModel>? leads,
     int? totalCount,
-    LeadTemperature? temperatureFilter,
-    bool clearTemperatureFilter = false,
     LeadStage? stageFilter,
     bool clearStageFilter = false,
+    bool? ibLinkedOnly,
     String? sortBy,
     String? searchQuery,
     bool clearSearchQuery = false,
     int? page,
     String? error,
-    Map<LeadTemperature, int>? temperatureCounts,
   }) {
     return LeadInboxState(
       isLoading: isLoading ?? this.isLoading,
       leads: leads ?? this.leads,
       totalCount: totalCount ?? this.totalCount,
-      temperatureFilter: clearTemperatureFilter
-          ? null
-          : (temperatureFilter ?? this.temperatureFilter),
       stageFilter:
           clearStageFilter ? null : (stageFilter ?? this.stageFilter),
+      ibLinkedOnly: ibLinkedOnly ?? this.ibLinkedOnly,
       sortBy: sortBy ?? this.sortBy,
       searchQuery:
           clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
       page: page ?? this.page,
       error: error,
-      temperatureCounts: temperatureCounts ?? this.temperatureCounts,
     );
   }
 
@@ -71,8 +63,8 @@ class LeadInboxState extends Equatable {
         isLoading,
         leads.length,
         totalCount,
-        temperatureFilter,
         stageFilter,
+        ibLinkedOnly,
         sortBy,
         searchQuery,
         page,
@@ -101,42 +93,26 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
       final repo = getIt<LeadRepository>();
       final result = await repo.getLeads(
         page: state.page,
-        temperature: state.temperatureFilter,
         stage: state.stageFilter,
         searchQuery: state.searchQuery,
         sortBy: state.sortBy,
         assignedRmId: rmId,
       );
 
-      // Temperature counts from all leads (unfiltered)
-      final allResult = await repo.getLeads(
-        page: 1,
-        pageSize: 500,
-        assignedRmId: rmId,
-      );
-      final counts = <LeadTemperature, int>{};
-      for (final lead in allResult.items) {
-        counts[lead.temperature] = (counts[lead.temperature] ?? 0) + 1;
+      var items = result.items;
+      // Client-side IB-linked filter (repo doesn't have this gate).
+      if (state.ibLinkedOnly) {
+        items = items.where((l) => l.ibLeadIds.isNotEmpty).toList();
       }
 
       emit(state.copyWith(
         isLoading: false,
-        leads: result.items,
+        leads: items,
         totalCount: result.totalCount,
-        temperatureCounts: counts,
       ));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
-  }
-
-  void setTemperatureFilter(LeadTemperature? temperature) {
-    emit(state.copyWith(
-      temperatureFilter: temperature,
-      clearTemperatureFilter: temperature == null,
-      page: 1,
-    ));
-    loadLeads(refresh: true);
   }
 
   void setStageFilter(LeadStage? stage) {
@@ -148,28 +124,32 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
     loadLeads(refresh: true);
   }
 
+  void setIbLinkedOnly(bool v) {
+    emit(state.copyWith(ibLinkedOnly: v, page: 1));
+    loadLeads(refresh: true);
+  }
+
   void setSort(String sortBy) {
     emit(state.copyWith(sortBy: sortBy, page: 1));
     loadLeads(refresh: true);
   }
 
   void search(String query) {
-    // Instant optimistic filter on the already-loaded list for responsive feedback.
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       emit(state.copyWith(clearSearchQuery: true, page: 1));
     } else {
+      // Optimistic client-side pre-filter: name, company, group only (#1).
       final q = trimmed.toLowerCase();
-      final qDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
       final preview = state.leads.where((l) {
-        final nameLc = l.fullName.toLowerCase();
-        final nameHit = nameLc.contains(q) ||
-            nameLc.split(RegExp(r'\s+')).any((t) => t.startsWith(q));
-        final phoneHit = qDigits.isNotEmpty &&
-            l.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(qDigits);
-        final companyHit = l.companyName?.toLowerCase().contains(q) ?? false;
-        final emailHit = l.email?.toLowerCase().contains(q) ?? false;
-        return nameHit || phoneHit || companyHit || emailHit;
+        bool nameHit(String name) {
+          final n = name.toLowerCase();
+          return n.contains(q) ||
+              n.split(RegExp(r'\s+')).any((t) => t.startsWith(q));
+        }
+        return nameHit(l.fullName) ||
+            (l.companyName?.toLowerCase().contains(q) ?? false) ||
+            (l.groupName?.toLowerCase().contains(q) ?? false);
       }).toList();
       emit(state.copyWith(
         searchQuery: trimmed,
@@ -177,7 +157,6 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
         page: 1,
       ));
     }
-    // Debounce the authoritative repo fetch.
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
       loadLeads(refresh: true);

@@ -51,7 +51,7 @@ enum IbLeadStatus {
   approved('Approved'),
   sentBack('Sent Back'),
   forwarded('Approved'), // legacy alias; treated as Approved in UI
-  dropped('Dropped or Closed');
+  dropped('Dropped');
 
   final String label;
   const IbLeadStatus(this.label);
@@ -119,11 +119,11 @@ enum IbDealSizeBucket {
   }
 }
 
-/// 30-day status update enum surfaced on every approved IB lead.
+/// IB Status Tracking enum — hardcoded per spec. 5 values only.
+/// Reminder cadence: weekly (7 days); escalation at day 9.
 enum IbProgressStatus {
   inDiscussion('In Discussion'),
   proposalSent('Proposal Sent'),
-  negotiating('Negotiating'),
   onHold('On Hold'),
   closedWon('Closed Won'),
   closedLost('Closed Lost');

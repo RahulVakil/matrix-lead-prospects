@@ -54,7 +54,7 @@ class IbLeadFormState extends Equatable {
     this.notes = '',
     this.isConfidential = false,
     this.confidentialReason = '',
-    this.declarationAccepted = false,
+    this.declarationAccepted = true, // RM-5: pre-ticked by default
     this.isSubmitting = false,
     this.submitError,
     this.isCheckingCoverage = false,

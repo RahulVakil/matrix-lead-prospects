@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/widgets/create_chooser_sheet.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 
@@ -13,6 +14,12 @@ class TlDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return HeroScaffold(
       header: HeroAppBar.simple(title: 'Team dashboard', subtitle: 'Pipeline overview'),
+      // TL #3 — same FAB chooser as RM
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppColors.navyPrimary,
+        onPressed: () => showCreateChooser(context),
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppDimensions.screenPadding),
         children: [
@@ -55,11 +62,12 @@ class TlDashboardScreen extends StatelessWidget {
           // RM-wise breakdown
           Text('RM PERFORMANCE', style: AppTextStyles.labelSmall.copyWith(letterSpacing: 1)),
           const SizedBox(height: 12),
-          _rmRow(context, 'RM001', 'Priya Sharma', 18, 4, 82, AppColors.successGreen),
-          _rmRow(context, 'RM002', 'Amit Verma', 15, 2, 65, AppColors.warmAmber),
-          _rmRow(context, 'RM003', 'Deepa Nair', 12, 1, 71, AppColors.successGreen),
-          _rmRow(context, 'RM004', 'Karan Kapoor', 14, 3, 58, AppColors.warmAmber),
-          _rmRow(context, 'RM005', 'Neha Singh', 8, 0, 45, AppColors.errorRed),
+          // TL #1 + #5 — removed Score; added IB Leads (Approved)
+          _rmRow(context, 'RM001', 'Priya Sharma', 18, 4, 3),
+          _rmRow(context, 'RM002', 'Amit Verma', 15, 2, 1),
+          _rmRow(context, 'RM003', 'Deepa Nair', 12, 1, 2),
+          _rmRow(context, 'RM004', 'Karan Kapoor', 14, 3, 0),
+          _rmRow(context, 'RM005', 'Neha Singh', 8, 0, 1),
           const SizedBox(height: 24),
 
           // Recent activity
@@ -148,7 +156,7 @@ class TlDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _rmRow(BuildContext context, String rmId, String name, int leads, int conversions, int avgScore, Color scoreColor) {
+  Widget _rmRow(BuildContext context, String rmId, String name, int leads, int conversions, int ibApproved) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -174,19 +182,13 @@ class TlDashboardScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: AppTextStyles.labelLarge),
-                  Text('$leads leads  ·  $conversions converted', style: AppTextStyles.bodySmall),
+                  Text(
+                    '$leads leads · $conversions converted · $ibApproved IB',
+                    style: AppTextStyles.bodySmall,
+                  ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: scoreColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text('$avgScore', style: AppTextStyles.labelSmall.copyWith(color: scoreColor, fontWeight: FontWeight.w700)),
-            ),
-            const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
           ],
         ),

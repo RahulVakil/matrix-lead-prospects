@@ -12,9 +12,11 @@ import '../../../../core/models/next_action_model.dart';
 import '../../../../core/models/timeline_entry_model.dart';
 import '../../../../core/repositories/activity_repository.dart';
 import '../../../../core/repositories/audit_repository.dart';
+import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/duplicate_ib_check.dart';
 import '../../../../core/utils/inr_formatter.dart';
 import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_button.dart';
@@ -349,6 +351,22 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     if (lead == null) return;
     switch (value) {
       case 'ib':
+        // RM-7: Duplicate IB block — check before opening convert sheet
+        final ibRepo = getIt<IbLeadRepository>();
+        final allIb = await ibRepo.getAllForBranchHead('');
+        final blocking = DuplicateIbCheck.findActiveIbLead(lead.fullName, allIb);
+        if (blocking != null) {
+          if (mounted) {
+            showCompassSnack(
+              context,
+              message:
+                  'This client already has an active IB lead (#$blocking). '
+                  'Only one active IB lead per client is allowed.',
+              type: CompassSnackType.warn,
+            );
+          }
+          return;
+        }
         final confirmed = await showConvertToIbSheet(context, lead);
         if (confirmed == true && mounted) {
           await context.push('/ib-leads/new', extra: {
@@ -361,7 +379,14 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             'estimatedAum': lead.estimatedAum,
             'notes': lead.notes,
           });
-          if (mounted) await _load();
+          if (mounted) {
+            showCompassSnack(
+              context,
+              message: 'IB lead created — wealth lead stays in your pipeline',
+              type: CompassSnackType.success,
+            );
+            await _load();
+          }
         }
         break;
       case 'edit':

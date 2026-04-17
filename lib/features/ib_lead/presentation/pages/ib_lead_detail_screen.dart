@@ -4,9 +4,10 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/enums/ib_deal_type.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/models/ib_lead_model.dart';
-import '../../../../core/models/ib_progress_update.dart';
+import '../../../../core/models/ib_remark_entry.dart';
 import '../../../../core/models/notification_model.dart';
 import '../../../../core/repositories/ib_lead_repository.dart';
+import '../../../../core/services/mock_notification_queue.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -20,6 +21,7 @@ import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../widgets/mis_assignment_sheet.dart';
 import '../widgets/progress_update_sheet.dart';
+import '../widgets/resubmit_sheet.dart';
 import '../widgets/send_back_sheet.dart';
 
 class IbLeadDetailScreen extends StatefulWidget {
@@ -79,6 +81,33 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     );
     await _repo.saveDraft(assigned); // upserts via _put
     if (!mounted) return;
+    // Fire mock notifications per the routing spec:
+    // 1. RM gets in-app + email: "Your IB lead #<ID> approved. SPOC: <Name>, <Email>, <Mobile>"
+    MockNotificationQueue.pushInApp(
+      recipientId: assigned.createdById,
+      recipientName: assigned.createdByName,
+      title: 'IB lead approved',
+      body: 'Your IB lead #${assigned.id} has been approved. SPOC: ${assignment.ibRm.name}, ${assignment.ibRm.email}.',
+      deepLink: '/ib-leads/${assigned.id}',
+    );
+    MockNotificationQueue.pushEmail(
+      to: '${assigned.createdByName.toLowerCase().replaceAll(' ', '.')}@jmfs.in',
+      subject: 'IB Lead #${assigned.id} Approved — SPOC: ${assignment.ibRm.name}',
+      body: 'Hi ${assigned.createdByName},\n\nYour IB lead #${assigned.id} (${assigned.companyName}) has been approved.\n\nSPOC: ${assignment.ibRm.name}\nEmail: ${assignment.ibRm.email}\n\nRegards,\nJM Matrix',
+    );
+    // 2. IB SPOC gets in-app + email: "New IB lead assigned: #<ID>, Client: <Name>. Created by: <RM Name>."
+    MockNotificationQueue.pushInApp(
+      recipientId: assignment.ibRm.id,
+      recipientName: assignment.ibRm.name,
+      title: 'New IB lead assigned',
+      body: 'New IB lead assigned: #${assigned.id}, Client: ${assigned.companyName}. Created by: ${assigned.createdByName}.',
+      deepLink: '/ib-leads/${assigned.id}',
+    );
+    MockNotificationQueue.pushEmail(
+      to: assignment.ibRm.email,
+      subject: 'New IB Lead Assigned: #${assigned.id} — ${assigned.companyName}',
+      body: 'Hi ${assignment.ibRm.name},\n\nA new IB lead has been assigned to you.\n\nLead ID: #${assigned.id}\nClient: ${assigned.companyName}\nDeal Type: ${assigned.dealTypeDisplay}\nCreated by: ${assigned.createdByName}\n\nPlease review in JM Matrix.\n\nRegards,\nJM Matrix',
+    );
     await _notifications.push(
       topic: 'rm-${assigned.createdById}',
       notification: NotificationModel(
@@ -97,12 +126,208 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       _lead = assigned;
       _busy = false;
     });
+    // #6: Show email preview post-approval
+    _showEmailPreview(assigned);
     showCompassSnack(
       // ignore: use_build_context_synchronously
       context,
-      message: 'Approved — assigned to ${assignment.ibRm.name}',
+      message: 'Approved — assigned to ${assignment.ibRm.name}. Email notifications sent.',
       type: CompassSnackType.success,
     );
+  }
+
+  void _showEmailPreview(IbLeadModel lead) {
+    final subject = 'New IB lead pending review: ${lead.companyName} (#${lead.id})';
+    final body = 'Hi Sonia,\n\n'
+        'A new IB lead has been submitted by ${lead.createdByName}.\n\n'
+        'Company: ${lead.companyName}\n'
+        'Deal Type: ${lead.dealTypeDisplay}\n'
+        'Deal Size: ${lead.dealValue != null ? IndianCurrencyFormatter.shortForm(lead.dealValue!) : lead.dealValueRange.label}\n\n'
+        'Please review and take action in JM Matrix.\n\n'
+        'Regards,\nJM Matrix System';
+    MockNotificationQueue.pushEmail(
+      to: 'sonia.parekh@jmfs.in',
+      subject: subject,
+      body: body,
+    );
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Email Preview (Mock)'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('To: sonia.parekh@jmfs.in', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Subject: $subject', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(body, style: AppTextStyles.bodySmall),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    showCompassSnack(context, message: 'Email queued (mock)', type: CompassSnackType.success);
+  }
+
+  Future<void> _dropIbLead() async {
+    if (_lead == null) return;
+    final reason = await showSendBackSheet(context, _lead!.companyName,
+        title: 'Drop IB Lead', hintText: 'Reason for dropping…');
+    if (reason == null || reason.trim().length < 10) return;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    setState(() => _busy = true);
+    final updated = _lead!.copyWith(
+      status: IbLeadStatus.dropped,
+      remarks: reason.trim(),
+      branchHeadId: user.id,
+      branchHeadName: user.name,
+      decidedAt: DateTime.now(),
+    );
+    await _repo.saveDraft(updated);
+    await _notifications.push(
+      topic: 'rm-${updated.createdById}',
+      notification: NotificationModel(
+        id: 'NTF_${DateTime.now().millisecondsSinceEpoch}',
+        type: NotificationType.ibLeadSentBack,
+        title: 'IB lead dropped',
+        body: '${updated.companyName} dropped: $reason',
+        deepLink: '/ib-leads/${updated.id}',
+        createdAt: DateTime.now(),
+        recipientUserId: updated.createdById,
+      ),
+    );
+    if (!mounted) return;
+    setState(() { _lead = updated; _busy = false; });
+    showCompassSnack(context,
+        message: 'IB lead dropped — RM notified',
+        type: CompassSnackType.warn);
+  }
+
+  Future<void> _resubmit() async {
+    if (_lead == null) return;
+    // Show the resubmit sheet with the latest admin remark so the RM must
+    // address it before resubmitting.
+    final adminRemark = _lead!.remarks ?? 'No specific remark.';
+    final result = await showResubmitSheet(context, adminRemark: adminRemark);
+    if (result == null) return;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    setState(() => _busy = true);
+    final entry = IbRemarkEntry(
+      id: 'RMK_${DateTime.now().microsecondsSinceEpoch}',
+      authorId: user.id,
+      authorName: user.name,
+      role: IbRemarkRole.rm,
+      text: result.replyText,
+      docs: result.docs,
+      createdAt: DateTime.now(),
+    );
+    final updated = _lead!.copyWith(
+      status: IbLeadStatus.pending,
+      submittedAt: DateTime.now(),
+      remarkThread: [..._lead!.remarkThread, entry],
+    );
+    await _repo.saveDraft(updated);
+    if (!mounted) return;
+    setState(() { _lead = updated; _busy = false; });
+    showCompassSnack(context,
+        message: 'Resubmitted with response to Admin / MIS',
+        type: CompassSnackType.success);
+  }
+
+  Widget? _buildBottomBar({
+    required bool canDecide,
+    required bool isCreator,
+    required bool canLogProgress,
+    required IbLeadModel lead,
+  }) {
+    // Admin/MIS: 3 actions (Approve / Send Back / Drop) when lead is actionable
+    if (canDecide) {
+      return SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+          decoration: const BoxDecoration(
+            color: AppColors.surfacePrimary,
+            border: Border(top: BorderSide(color: AppColors.cardBorder)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: CompassButton.danger(
+                      label: 'Drop',
+                      onPressed: _busy ? null : _dropIbLead,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CompassButton.secondary(
+                      label: 'Send Back',
+                      onPressed: _busy ? null : _sendBack,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CompassButton(
+                      label: 'Approve',
+                      isLoading: _busy,
+                      onPressed: _approve,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // RM/TL/IB: Status Update bottom bar when lead is approved + assigned
+    if (canLogProgress && lead.assignedIbRmName != null) {
+      return SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: const BoxDecoration(
+            color: AppColors.surfacePrimary,
+            border: Border(top: BorderSide(color: AppColors.cardBorder)),
+          ),
+          child: CompassButton(
+            label: 'Update Status',
+            icon: Icons.edit_note,
+            onPressed: _logProgress,
+          ),
+        ),
+      );
+    }
+    // RM: resubmit when sent back
+    if (isCreator && lead.status == IbLeadStatus.sentBack) {
+      return SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: const BoxDecoration(
+            color: AppColors.surfacePrimary,
+            border: Border(top: BorderSide(color: AppColors.cardBorder)),
+          ),
+          child: CompassButton(
+            label: 'Resubmit to Admin / MIS',
+            isLoading: _busy,
+            onPressed: _resubmit,
+          ),
+        ),
+      );
+    }
+    return null;
   }
 
   Future<void> _logProgress() async {
@@ -142,21 +367,34 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       branchHeadName: user.name,
       remarks: remarks,
     );
+    // Append to remark thread so the full back-and-forth is preserved.
+    final entry = IbRemarkEntry(
+      id: 'RMK_${DateTime.now().microsecondsSinceEpoch}',
+      authorId: user.id,
+      authorName: user.name,
+      role: IbRemarkRole.admin,
+      text: remarks,
+      createdAt: DateTime.now(),
+    );
+    final withThread = updated.copyWith(
+      remarkThread: [..._lead!.remarkThread, entry],
+    );
+    await _repo.saveDraft(withThread);
     await _notifications.push(
-      topic: 'rm-${updated.createdById}',
+      topic: 'rm-${withThread.createdById}',
       notification: NotificationModel(
         id: 'NTF_${DateTime.now().millisecondsSinceEpoch}',
         type: NotificationType.ibLeadSentBack,
         title: 'IB lead returned',
-        body: '${updated.companyName} sent back: $remarks',
-        deepLink: '/ib-leads/${updated.id}',
+        body: '${withThread.companyName} sent back: $remarks',
+        deepLink: '/ib-leads/${withThread.id}',
         createdAt: DateTime.now(),
-        recipientUserId: updated.createdById,
+        recipientUserId: withThread.createdById,
       ),
     );
     if (!mounted) return;
     setState(() {
-      _lead = updated;
+      _lead = withThread;
       _busy = false;
     });
     showCompassSnack(
@@ -176,14 +414,19 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     }
 
     final user = context.watch<AuthCubit>().state.currentUser;
-    // Only Admin / MIS can approve or send back. IB user reads only.
+    // Admin / MIS can decide on leads that are awaiting review OR sent back.
     final isReviewer = user?.role == UserRole.admin;
-    final isPending = _lead!.status.isAwaitingReview;
-    final canDecide = isReviewer && isPending;
+    final isActionable = _lead!.status.isAwaitingReview ||
+        _lead!.status == IbLeadStatus.sentBack;
+    final canDecide = isReviewer && isActionable;
 
     final lead = _lead!;
     final isCreator = user?.id == lead.createdById;
-    final canLogProgress = isCreator && lead.status.isApproved;
+    // Section 7.6: RM/TL/IB can update status; Admin is read-only.
+    final canLogProgress = lead.status.isApproved &&
+        (user?.role == UserRole.rm ||
+         user?.role == UserRole.teamLead ||
+         user?.role == UserRole.ib);
     // Confidential mask for non-creator + non-admin when lead is not yet
     // assigned (prototype approximation of the DPDP-style restriction).
     final maskIdentity = lead.isConfidential &&
@@ -204,7 +447,10 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 120),
         children: [
           _statusBar(lead),
-          if (lead.isProgressOverdue && canLogProgress) ...[
+          if (lead.isProgressEscalated) ...[
+            const SizedBox(height: 10),
+            _EscalatedBanner(days: lead.daysSinceLastProgress),
+          ] else if (lead.isProgressOverdue) ...[
             const SizedBox(height: 10),
             _OverdueBanner(days: lead.daysSinceLastProgress),
           ],
@@ -280,13 +526,13 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
               ],
             ),
           ),
+          if (lead.remarkThread.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _RemarkThreadCard(thread: lead.remarkThread),
+          ],
           if (lead.status.isApproved && lead.assignedIbRmName != null) ...[
             const SizedBox(height: 12),
-            _ProgressCard(
-              lead: lead,
-              canLog: canLogProgress,
-              onLog: _logProgress,
-            ),
+            _ProgressCard(lead: lead),
           ],
           const SizedBox(height: 12),
           CompassCard(
@@ -308,35 +554,12 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: canDecide
-          ? SafeArea(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                decoration: const BoxDecoration(
-                  color: AppColors.surfacePrimary,
-                  border: Border(top: BorderSide(color: AppColors.cardBorder)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CompassButton.secondary(
-                        label: 'Send Back',
-                        onPressed: _busy ? null : _sendBack,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: CompassButton(
-                        label: 'Approve & Forward',
-                        isLoading: _busy,
-                        onPressed: _approve,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : null,
+      bottomNavigationBar: _buildBottomBar(
+        canDecide: canDecide,
+        isCreator: isCreator,
+        canLogProgress: canLogProgress,
+        lead: lead,
+      ),
     );
   }
 
@@ -423,10 +646,43 @@ class _OverdueBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'Status update overdue — $days days since last update. '
-              'Update now to stay compliant with the 30-day cycle.',
+              'Update now to stay compliant with the 7-day cycle.',
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.errorRed,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EscalatedBanner extends StatelessWidget {
+  final int days;
+  const _EscalatedBanner({required this.days});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.errorRed.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.errorRed.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded,
+              color: AppColors.errorRed, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'ESCALATED — $days days since last update. '
+              'Team Lead + IB SPOC have been notified.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.errorRed,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -546,15 +802,9 @@ class _AssignedCard extends StatelessWidget {
   }
 }
 
-class _ProgressCard extends StatelessWidget {
-  final IbLeadModel lead;
-  final bool canLog;
-  final VoidCallback onLog;
-  const _ProgressCard({
-    required this.lead,
-    required this.canLog,
-    required this.onLog,
-  });
+class _RemarkThreadCard extends StatelessWidget {
+  final List<IbRemarkEntry> thread;
+  const _RemarkThreadCard({required this.thread});
 
   @override
   Widget build(BuildContext context) {
@@ -562,30 +812,97 @@ class _ProgressCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: CompassSectionHeader(title: 'Status updates (30-day cycle)'),
-              ),
-              if (canLog)
-                TextButton.icon(
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Update'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.navyPrimary,
-                    minimumSize: Size.zero,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const CompassSectionHeader(title: 'Sent-back conversation'),
+          const SizedBox(height: 8),
+          ...thread.map(
+            (e) {
+              final isAdmin = e.role == IbRemarkRole.admin;
+              final accent = isAdmin ? AppColors.errorRed : AppColors.navyPrimary;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: accent.withValues(alpha: 0.2)),
                   ),
-                  onPressed: onLog,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isAdmin ? Icons.admin_panel_settings : Icons.person,
+                            size: 14,
+                            color: accent,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${e.authorName} (${isAdmin ? "Admin / MIS" : "RM"})',
+                            style: AppTextStyles.caption.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${e.createdAt.day}/${e.createdAt.month}/${e.createdAt.year}',
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.textHint),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(e.text, style: AppTextStyles.bodySmall),
+                      if (e.docs.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: e.docs
+                              .map((d) => Chip(
+                                    avatar: const Icon(
+                                        Icons.attach_file, size: 14),
+                                    label: Text(d.fileName,
+                                        style: AppTextStyles.caption),
+                                    backgroundColor:
+                                        AppColors.surfaceTertiary,
+                                    side: BorderSide(
+                                        color: AppColors.borderDefault),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ))
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-            ],
+              );
+            },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressCard extends StatelessWidget {
+  final IbLeadModel lead;
+  const _ProgressCard({required this.lead});
+
+  @override
+  Widget build(BuildContext context) {
+    return CompassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CompassSectionHeader(title: 'Status updates (weekly cycle)'),
           const SizedBox(height: 6),
           if (lead.progressUpdates.isEmpty)
             Text(
-              'No updates yet. The RM owes a first update within 30 days of assignment.',
+              'No updates yet. The RM owes a first update within 7 days of assignment.',
               style: AppTextStyles.caption
                   .copyWith(color: AppColors.textSecondary),
             )

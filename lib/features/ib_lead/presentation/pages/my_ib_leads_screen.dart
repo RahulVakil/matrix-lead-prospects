@@ -33,10 +33,12 @@ class MyIbLeadsScreen extends StatefulWidget {
 class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
   final IbLeadRepository _ibRepo = getIt<IbLeadRepository>();
   final LeadRepository _leadRepo = getIt<LeadRepository>();
+  final _searchCtrl = TextEditingController();
 
   bool _loading = true;
   List<IbLeadModel> _leads = [];
   IbLeadStatus? _statusFilter;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -113,13 +115,25 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
   }
 
   List<IbLeadModel> get _filtered {
-    if (_statusFilter == null) return _leads;
-    return _leads.where((l) {
-      if (_statusFilter == IbLeadStatus.approved) return l.status.isApproved;
-      // draft + pending both surface under the "Lead Created" filter.
-      if (_statusFilter == IbLeadStatus.pending) return l.status.isAwaitingReview;
-      return l.status == _statusFilter;
-    }).toList();
+    var list = _leads;
+    // Status filter
+    if (_statusFilter != null) {
+      list = list.where((l) {
+        if (_statusFilter == IbLeadStatus.approved) return l.status.isApproved;
+        if (_statusFilter == IbLeadStatus.pending) return l.status.isAwaitingReview;
+        return l.status == _statusFilter;
+      }).toList();
+    }
+    // Search filter (#6)
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((l) =>
+          l.companyName.toLowerCase().contains(q) ||
+          (l.clientName?.toLowerCase().contains(q) ?? false) ||
+          l.dealType.label.toLowerCase().contains(q) ||
+          l.createdByName.toLowerCase().contains(q)).toList();
+    }
+    return list;
   }
 
   @override
@@ -146,6 +160,48 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 96),
                 children: [
+                  // Search bar (#6)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                      decoration: InputDecoration(
+                        hintText: 'Search by company, client, deal type…',
+                        hintStyle: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.textHint),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                splashRadius: 18,
+                              ),
+                        filled: true,
+                        fillColor: AppColors.surfaceTertiary,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.borderDefault),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.borderDefault),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppColors.navyPrimary, width: 1.5),
+                        ),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
                   if (role == UserRole.rm && sentBack.isNotEmpty) ...[
                     _SentBackStrip(leads: sentBack),
                     const SizedBox(height: 14),
@@ -230,7 +286,6 @@ class _IbLeadCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor(lead.status);
-    final tempColor = _tempColor(lead.temperature);
     final isSentBack = lead.status == IbLeadStatus.sentBack;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -253,6 +308,7 @@ class _IbLeadCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // #7: Left bar colored by status (no temperature tagging)
                     Container(
                       width: 3,
                       height: 48,
@@ -311,9 +367,6 @@ class _IbLeadCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Right-edge column: status pill on top, temperature pill
-                    // below — both right-aligned and consistently positioned
-                    // across every card (no more title-width drift).
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -333,9 +386,58 @@ class _IbLeadCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        _TempChip(
-                            color: tempColor, label: lead.temperature.label),
+                        // Overdue / Escalated flags
+                        if (lead.isProgressEscalated) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.errorRed,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded,
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${lead.daysSinceLastProgress}d',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (lead.isProgressOverdue) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.warmAmber,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.schedule,
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${lead.daysSinceLastProgress}d',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -388,42 +490,6 @@ class _IbLeadCard extends StatelessWidget {
   }
 }
 
-class _TempChip extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _TempChip({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: AppTextStyles.caption.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 10.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // Sent-back strip (RM only)

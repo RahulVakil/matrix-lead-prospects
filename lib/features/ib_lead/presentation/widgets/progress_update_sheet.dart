@@ -99,7 +99,7 @@ class _ProgressUpdateSheetState extends State<_ProgressUpdateSheet> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '30-day cycle · pick the current stage and add a short note',
+                      '7-day cycle · pick the current stage and add a short note',
                       style: AppTextStyles.bodySmall
                           .copyWith(color: AppColors.textSecondary),
                     ),

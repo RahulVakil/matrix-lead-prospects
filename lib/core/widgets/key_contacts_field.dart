@@ -4,8 +4,10 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'compass_text_field.dart';
 
-/// Multi-row name+designation editor used for IB Lead Capture's
-/// "Key Contacts" section.
+/// RM-4: Key Contacts editor for IB Lead Capture.
+/// Contact 1 is mandatory (Name, Designation, Mobile, Email).
+/// Contact 2 is optional — shown via "+ Add Another Key Contact" button.
+/// Max 2 contacts.
 class KeyContactsField extends StatelessWidget {
   final List<KeyContactModel> contacts;
   final ValueChanged<List<KeyContactModel>> onChanged;
@@ -19,10 +21,15 @@ class KeyContactsField extends StatelessWidget {
   });
 
   void _add() {
-    onChanged([...contacts, const KeyContactModel(name: '', designation: '')]);
+    if (contacts.length >= 2) return;
+    onChanged([
+      ...contacts,
+      const KeyContactModel(name: '', designation: ''),
+    ]);
   }
 
   void _remove(int index) {
+    if (index == 0 && contacts.length == 1) return; // Contact 1 is mandatory
     final next = [...contacts]..removeAt(index);
     onChanged(next);
   }
@@ -35,6 +42,12 @@ class KeyContactsField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ensure at least 1 contact exists (Contact 1 mandatory)
+    if (contacts.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onChanged([const KeyContactModel(name: '', designation: '')]);
+      });
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -51,44 +64,94 @@ class KeyContactsField extends StatelessWidget {
         ],
         ...List.generate(contacts.length, (i) {
           final c = contacts[i];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
+          final isMandatory = i == 0;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceTertiary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderDefault),
+            ),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 5,
-                  child: CompassTextField(
-                    initialValue: c.name,
-                    hint: 'Name',
-                    onChanged: (v) => _update(i, KeyContactModel(name: v, designation: c.designation)),
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      isMandatory
+                          ? 'Contact 1 (mandatory)'
+                          : 'Contact 2 (optional)',
+                      style: AppTextStyles.caption.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (!isMandatory)
+                      IconButton(
+                        icon: const Icon(Icons.close,
+                            size: 16, color: AppColors.errorRed),
+                        tooltip: 'Remove',
+                        onPressed: () => _remove(i),
+                        splashRadius: 16,
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 5,
-                  child: CompassTextField(
-                    initialValue: c.designation,
-                    hint: 'Designation',
-                    onChanged: (v) => _update(i, KeyContactModel(name: c.name, designation: v)),
-                  ),
+                const SizedBox(height: 8),
+                CompassTextField(
+                  initialValue: c.name,
+                  label: 'Name',
+                  isRequired: isMandatory,
+                  onChanged: (v) => _update(i, c.copyWith(name: v)),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.errorRed),
-                  onPressed: () => _remove(i),
+                const SizedBox(height: 8),
+                CompassTextField(
+                  initialValue: c.designation,
+                  label: 'Designation',
+                  isRequired: isMandatory,
+                  onChanged: (v) => _update(i, c.copyWith(designation: v)),
+                ),
+                const SizedBox(height: 8),
+                CompassTextField(
+                  initialValue: c.mobile,
+                  label: 'Mobile No.',
+                  isRequired: isMandatory,
+                  hint: '+91 XXXXX XXXXX',
+                  prefixIcon: Icons.phone_outlined,
+                  onChanged: (v) => _update(i, c.copyWith(mobile: v)),
+                ),
+                const SizedBox(height: 8),
+                CompassTextField(
+                  initialValue: c.email,
+                  label: 'Email ID',
+                  isRequired: isMandatory,
+                  hint: 'name@company.com',
+                  prefixIcon: Icons.email_outlined,
+                  onChanged: (v) => _update(i, c.copyWith(email: v)),
                 ),
               ],
             ),
           );
         }),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _add,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add contact'),
+        if (contacts.length < 2)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('+ Add Another Key Contact'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.navyPrimary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
           ),
-        ),
       ],
     );
   }

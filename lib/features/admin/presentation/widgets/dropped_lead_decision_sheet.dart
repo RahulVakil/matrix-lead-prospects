@@ -194,9 +194,11 @@ class _DecisionSheetState extends State<_DecisionSheet> {
                         maxLines: 3,
                         maxLength: 400,
                         onChanged: (_) {
-                          if (_error != null) {
-                            setState(() => _error = null);
-                          }
+                          // Re-evaluate _isValid on every keystroke so button
+                          // enables as soon as ≥10 chars are typed.
+                          setState(() {
+                            if (_error != null) _error = null;
+                          });
                         },
                         decoration: InputDecoration(
                           hintText:

@@ -1,3 +1,4 @@
+import '../../enums/lead_entity_type.dart';
 import '../../enums/lead_stage.dart';
 import '../../enums/lead_temperature.dart';
 import '../../enums/lead_source.dart';
@@ -28,7 +29,58 @@ class MockLeadRepository implements LeadRepository {
 
   MockLeadRepository() {
     _leads = MockDataGenerators.generateLeads(150);
-    _pool = MockDataGenerators.generatePoolLeads(15);
+    _pool = MockDataGenerators.generatePoolLeads(50);
+    _seedDemoScenarios();
+  }
+
+  void _seedDemoScenarios() {
+    final now = DateTime.now();
+    // Scenario B — Non-Individual, Entity Sub Type = Others, "Section 8 Company"
+    _leads.insert(0, LeadModel(
+      id: 'LEAD_B',
+      entityType: LeadEntityType.nonIndividual,
+      subType: LeadSubType.other,
+      fullName: 'Green Earth Foundation',
+      phone: '0000000000',
+      source: LeadSource.referral,
+      stage: LeadStage.lead,
+      score: 40,
+      assignedRmId: 'RM001',
+      assignedRmName: 'Priya Sharma',
+      vertical: 'EWG',
+      createdAt: now.subtract(const Duration(days: 3)),
+      updatedAt: now.subtract(const Duration(days: 3)),
+    ));
+    // Scenario D — Lead claimed 2 hours ago ("Newly Claimed" badge)
+    _leads.insert(0, LeadModel(
+      id: 'LEAD_D',
+      fullName: 'Rohit Agarwal',
+      phone: '0000000000',
+      source: LeadSource.referral,
+      stage: LeadStage.lead,
+      score: 55,
+      assignedRmId: 'RM001',
+      assignedRmName: 'Priya Sharma',
+      vertical: 'PWG',
+      createdAt: now.subtract(const Duration(hours: 2)),
+      updatedAt: now.subtract(const Duration(hours: 2)),
+    ));
+    // Scenario L — TL-created wealth leads (shows "My Lead" badge for TL001)
+    for (var i = 0; i < 3; i++) {
+      _leads.insert(0, LeadModel(
+        id: 'LEAD_L${i + 1}',
+        fullName: ['Amrita Desai', 'Sanjay Mhatre', 'Farhan Sheikh'][i],
+        phone: '0000000000',
+        source: LeadSource.referral,
+        stage: [LeadStage.lead, LeadStage.profiling, LeadStage.engage][i],
+        score: [45, 62, 78][i],
+        assignedRmId: 'TL001',
+        assignedRmName: 'Vikram Shah',
+        vertical: 'EWG',
+        createdAt: now.subtract(Duration(days: i + 1)),
+        updatedAt: now.subtract(Duration(days: i + 1)),
+      ));
+    }
   }
 
   @override
@@ -61,46 +113,35 @@ class MockLeadRepository implements LeadRepository {
     }
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final q = searchQuery.trim().toLowerCase();
-      // Phone normalization: strip non-digits so "+91 98765-43210" matches "9876543210".
-      final qDigits = searchQuery.replaceAll(RegExp(r'[^0-9]'), '');
+      // Search by name / company / group only (#1). No phone / email.
       bool nameMatch(String name) {
         final n = name.toLowerCase();
         if (n.contains(q)) return true;
         return n.split(RegExp(r'\s+')).any((t) => t.startsWith(q));
       }
-      bool phoneMatch(String phone) {
-        if (qDigits.isEmpty) return false;
-        final p = phone.replaceAll(RegExp(r'[^0-9]'), '');
-        return p.contains(qDigits);
-      }
       filtered = filtered.where((l) =>
           nameMatch(l.fullName) ||
-          phoneMatch(l.phone) ||
-          (l.email?.toLowerCase().contains(q) ?? false) ||
-          (l.companyName?.toLowerCase().contains(q) ?? false)).toList();
+          (l.companyName?.toLowerCase().contains(q) ?? false) ||
+          (l.groupName?.toLowerCase().contains(q) ?? false)).toList();
     }
 
-    // Sort
+    // Sort (#4 — 4 options only)
     switch (sortBy) {
-      case 'score':
-        filtered.sort((a, b) => ascending ? a.score.compareTo(b.score) : b.score.compareTo(a.score));
-        break;
       case 'name':
-        filtered.sort((a, b) => ascending ? a.fullName.compareTo(b.fullName) : b.fullName.compareTo(a.fullName));
-        break;
-      case 'lastActivity':
-        filtered.sort((a, b) {
-          final aTime = a.lastContactedAt ?? DateTime(2000);
-          final bTime = b.lastContactedAt ?? DateTime(2000);
-          return ascending ? aTime.compareTo(bTime) : bTime.compareTo(aTime);
-        });
+        filtered.sort((a, b) => a.fullName.compareTo(b.fullName));
         break;
       case 'aum':
         filtered.sort((a, b) {
           final aAum = a.estimatedAum ?? 0;
           final bAum = b.estimatedAum ?? 0;
-          return ascending ? aAum.compareTo(bAum) : bAum.compareTo(aAum);
+          return bAum.compareTo(aAum);
         });
+        break;
+      case 'created_desc':
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case 'created_asc':
+        filtered.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
       default:
         filtered.sort((a, b) => b.score.compareTo(a.score));

@@ -64,6 +64,11 @@ class MockDataGenerators {
     UserModel(id: 'RM003', name: 'Deepa Nair', empCode: 'EMP003', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', designation: 'RM'),
     UserModel(id: 'RM004', name: 'Karan Kapoor', empCode: 'EMP004', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'Sr. RM'),
     UserModel(id: 'RM005', name: 'Neha Singh', empCode: 'EMP005', role: UserRole.rm, branchName: 'Bangalore', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', designation: 'RM'),
+    UserModel(id: 'RM006', name: 'Arjun Bhatia', empCode: 'EMP006', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'RM'),
+    UserModel(id: 'RM007', name: 'Priya Menon', empCode: 'EMP007', role: UserRole.rm, branchName: 'Chennai', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', designation: 'Sr. RM'),
+    UserModel(id: 'RM008', name: 'Neha Kulkarni', empCode: 'EMP008', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', designation: 'RM'),
+    UserModel(id: 'RM009', name: 'Rohit Agarwal', empCode: 'EMP009', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'RM'),
+    UserModel(id: 'RM010', name: 'Tanvi Bhargava', empCode: 'EMP010', role: UserRole.rm, branchName: 'Hyderabad', teamId: 'T005', teamName: 'South Beta', regionName: 'South', designation: 'RM'),
   ];
 
   static UserModel get defaultRm => _rmNames[0];
@@ -75,14 +80,29 @@ class MockDataGenerators {
     branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'Team Lead',
   );
 
+  static UserModel get teamLead2 => UserModel(
+    id: 'TL002', name: 'Kavita Deshmukh', empCode: 'TL002', role: UserRole.teamLead,
+    branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'Team Lead',
+  );
+
   static UserModel get admin => UserModel(
-    id: 'ADM001', name: 'Ramesh Gupta', empCode: 'ADM001', role: UserRole.admin,
-    branchName: 'Mumbai HQ', designation: 'MIS Admin',
+    id: 'ADM001', name: 'Sonia Parekh', empCode: 'ADM001', role: UserRole.admin,
+    branchName: 'Mumbai HQ', designation: 'MIS Lead',
+  );
+
+  static UserModel get admin2 => UserModel(
+    id: 'ADM002', name: 'Suraj Menon', empCode: 'ADM002', role: UserRole.admin,
+    branchName: 'Mumbai HQ', designation: 'MIS Analyst',
   );
 
   static UserModel get ibUser => UserModel(
     id: 'IB001', name: 'Siddharth Kapoor', empCode: 'IB001', role: UserRole.ib,
     branchName: 'Mumbai HQ', designation: 'IB Analyst',
+  );
+
+  static UserModel get ibUser2 => UserModel(
+    id: 'IB002', name: 'Riya Tandon', empCode: 'IB002', role: UserRole.ib,
+    branchName: 'Mumbai HQ', designation: 'IB VP',
   );
 
   static List<LeadModel> generateLeads(int count, {String? rmId}) {

@@ -582,38 +582,7 @@ class _IbCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Container(
-                            margin: const EdgeInsets.only(left: 6),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _tempColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: _tempColor.withValues(alpha: 0.4)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                      color: _tempColor,
-                                      shape: BoxShape.circle),
-                                ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  ib.temperature.label,
-                                  style: AppTextStyles.caption.copyWith(
-                                    color: _tempColor,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // #7: Temperature tagging removed. Status pill is sufficient.
                         ],
                       ),
                       const SizedBox(height: 4),

@@ -66,9 +66,9 @@ class AppShell extends StatelessWidget {
       case UserRole.ib:
         return const [
           IbDashboardScreen(),
+          _PlaceholderTab(title: 'Clients', icon: Icons.people_outline),
           _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
           MoreScreen(),
-          MoreScreen(), // placeholder to keep 4 tabs
         ];
       case UserRole.admin:
         return const [

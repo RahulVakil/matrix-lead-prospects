@@ -60,10 +60,9 @@ class MoreScreen extends StatelessWidget {
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
         ];
       case UserRole.ib:
+        // IB-1: IB Approval module hidden for IB role. They only see their leads.
         return [
           _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.fact_check_outlined, label: 'IB approvals', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.add_business, label: 'New IB lead', onTap: () => context.push('/ib-leads/new')),
           _GridTile(icon: Icons.notifications_outlined, label: 'Notifications', onTap: () => context.push('/notifications')),
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
         ];

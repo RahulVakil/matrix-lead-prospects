@@ -162,14 +162,15 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
   // ── Save ───────────────────────────────────────────────────────────
 
+  /// Hard block (#7): both existingClient AND duplicateLead block submit.
+  bool get _isDuplicate =>
+      _coverage?.status == CoverageStatus.existingClient ||
+      _coverage?.status == CoverageStatus.duplicateLead;
+
   bool get _canSave {
     final hasName = _computedName.isNotEmpty;
     final hasPhone = _phoneCtrl.text.trim().length >= 10;
-    return hasName &&
-        hasPhone &&
-        _source != null &&
-        _consentGranted &&
-        (_coverage?.status != CoverageStatus.existingClient);
+    return hasName && hasPhone && _source != null && _consentGranted && !_isDuplicate;
   }
 
   Future<void> _save() async {
@@ -247,11 +248,44 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       header: HeroAppBar.simple(title: 'New lead'),
       bottomBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: CompassButton(
-            label: 'Save Lead',
-            isLoading: _saving,
-            onPressed: _canSave ? _save : null,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isDuplicate)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorRed.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppColors.errorRed.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.block,
+                          size: 16, color: AppColors.errorRed),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Duplicate found — this lead already exists. Contact your TL to proceed.',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.errorRed,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              CompassButton(
+                label: 'Save Lead',
+                isLoading: _saving,
+                onPressed: _canSave ? _save : null,
+              ),
+            ],
           ),
         ),
       ),
@@ -323,6 +357,18 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                     .toList(),
                 onChanged: (v) => setState(() => _subType = v),
               ),
+              // RM-3: free-text input when "Others" selected
+              if (_subType == LeadSubType.other) ...[
+                const SizedBox(height: 12),
+                CompassTextField(
+                  label: 'Specify Entity Sub Type',
+                  isRequired: true,
+                  hint: 'e.g. Section 8 Company',
+                  maxLength: 100,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required when Others is selected' : null,
+                ),
+              ],
             ],
 
             const SizedBox(height: 20),
@@ -331,29 +377,19 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
             const CompassSectionHeader(title: 'Name'),
             const SizedBox(height: 10),
             if (_entityType == LeadEntityType.individual) ...[
-              Row(
-                children: [
-                  Expanded(
-                    flex: 4,
-                    child: CompassTextField(
-                      controller: _firstNameCtrl,
-                      label: 'First name',
-                      isRequired: true,
-                      onChanged: _onNameOrFamilyChanged,
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 3,
-                    child: CompassTextField(
-                      controller: _middleNameCtrl,
-                      label: 'Middle',
-                      onChanged: _onNameOrFamilyChanged,
-                    ),
-                  ),
-                ],
+              CompassTextField(
+                controller: _firstNameCtrl,
+                label: 'First name',
+                isRequired: true,
+                onChanged: _onNameOrFamilyChanged,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _middleNameCtrl,
+                label: 'Middle name',
+                onChanged: _onNameOrFamilyChanged,
               ),
               const SizedBox(height: 12),
               CompassTextField(

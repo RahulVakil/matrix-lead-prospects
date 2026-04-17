@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/models/admin_action_record.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/lead_repository.dart';
@@ -39,7 +40,7 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -164,9 +165,10 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                       fontWeight: FontWeight.w700,
                     ),
                     tabs: [
-                      Tab(text: 'ASSIGN (${MockDataGenerators.allRMs.length})'),
+                      Tab(text: 'POOL (${_poolLeads.length})'),
+                      const Tab(text: 'REQUESTS'),
+                      const Tab(text: 'MAPPED'),
                       Tab(text: 'DROPPED (${_droppedLeads.length})'),
-                      const Tab(text: 'LOG'),
                     ],
                   ),
                 ),
@@ -175,11 +177,20 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                     controller: _tabCtrl,
                     children: [
                       _AssignTab(poolLeads: _poolLeads, onAssign: _assignLead),
+                      _LeadRequestsTab(),
+                      _MappedLeadsTab(onReturnToPool: (lead) async {
+                        await _repo.returnDroppedToPool(lead.id);
+                        if (mounted) {
+                          showCompassSnack(context,
+                              message: '${lead.fullName} returned to pool',
+                              type: CompassSnackType.success);
+                          _load();
+                        }
+                      }),
                       _DroppedTab(
                         leads: _droppedLeads,
                         onReview: _reviewDropped,
                       ),
-                      _RequestLogTab(),
                     ],
                   ),
                 ),
@@ -505,4 +516,172 @@ class _LogEntry {
     required this.status,
     required this.requestedAgo,
   });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Tab: Lead Requests (Admin-3)
+// ────────────────────────────────────────────────────────────────────
+
+class _LeadRequestsTab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // Mock: 3 RMs with outstanding requests.
+    final requests = [
+      _RequestRow('Priya Sharma', 'RM', 2, 12),
+      _RequestRow('Karan Kapoor', 'RM', 5, 8),
+      _RequestRow('Neha Kulkarni', 'RM', 3, 6),
+    ];
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Outstanding lead requests',
+            style: AppTextStyles.labelSmall.copyWith(
+                color: AppColors.textSecondary, letterSpacing: 1)),
+        const SizedBox(height: 12),
+        ...requests.map((r) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.surfacePrimary,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: AppColors.borderDefault.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppColors.avatarBackground,
+                        child: Text(
+                          r.name.split(' ').map((w) => w[0]).take(2).join(),
+                          style: AppTextStyles.caption.copyWith(
+                              color: AppColors.navyDark,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(r.name,
+                            style: AppTextStyles.labelLarge
+                                .copyWith(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${r.requested} leads requested · ${r.currentAllocation} currently allocated',
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textSecondary),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          showCompassSnack(context,
+                              message:
+                                  'Allocation flow — select leads from pool and assign to ${r.name}',
+                              type: CompassSnackType.success);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navyPrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          minimumSize: Size.zero,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Allocate'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )),
+      ],
+    );
+  }
+}
+
+class _RequestRow {
+  final String name;
+  final String role;
+  final int requested;
+  final int currentAllocation;
+  const _RequestRow(this.name, this.role, this.requested, this.currentAllocation);
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Tab: Mapped Leads (Admin-4)
+// ────────────────────────────────────────────────────────────────────
+
+class _MappedLeadsTab extends StatelessWidget {
+  final ValueChanged<LeadModel> onReturnToPool;
+  const _MappedLeadsTab({required this.onReturnToPool});
+
+  @override
+  Widget build(BuildContext context) {
+    // Mock: 20 allocated leads across RMs. Uses the leads repository.
+    return FutureBuilder<List<LeadModel>>(
+      future: getIt<LeadRepository>().getLeads(page: 1, pageSize: 20).then((r) =>
+          r.items.where((l) => l.stage != LeadStage.dropped).take(20).toList()),
+      builder: (context, snap) {
+        if (!snap.hasData) return const CompassLoader();
+        final leads = snap.data!;
+        if (leads.isEmpty) {
+          return const CompassEmptyState(
+            icon: Icons.assignment_outlined,
+            title: 'No mapped leads',
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: leads.length,
+          itemBuilder: (_, i) {
+            final l = leads[i];
+            final daysSince =
+                DateTime.now().difference(l.createdAt).inDays;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfacePrimary,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.borderDefault.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l.fullName,
+                            style: AppTextStyles.labelLarge
+                                .copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          'RM: ${l.assignedRmName} · ${l.stage.label} · $daysSince days ago',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.textHint),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // #4: Return to Pool removed from Mapped tab per spec.
+                  const Icon(Icons.chevron_right,
+                      size: 16, color: AppColors.textHint),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
