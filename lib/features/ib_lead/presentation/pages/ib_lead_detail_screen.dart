@@ -19,6 +19,7 @@ import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../widgets/email_preview_sheet.dart';
 import '../widgets/mis_assignment_sheet.dart';
 import '../widgets/progress_update_sheet.dart';
 import '../widgets/resubmit_sheet.dart';
@@ -59,17 +60,47 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     if (!mounted) return;
     final user = context.read<AuthCubit>().state.currentUser;
     if (user == null || _lead == null) return;
-    // Admin / MIS now explicitly picks the IB RM + CC list before approving.
+    final lead = _lead!;
+    // Step 1: Admin picks the IB RM + CC list.
     final assignment = await showMisAssignmentSheet(
       context,
-      dealType: _lead!.dealType,
-      companyLabel: _lead!.companyName,
+      dealType: lead.dealType,
+      companyLabel: lead.companyName,
     );
     if (assignment == null) return;
     if (!mounted) return;
+
+    // Step 2: Admin reviews (and optionally edits) the outbound email to the
+    // assigned IB SPOC. Nothing is persisted or notified until they confirm.
+    final dealSize = lead.dealValue != null
+        ? IndianCurrencyFormatter.shortForm(lead.dealValue!)
+        : lead.dealValueRange.label;
+    final defaultSubject =
+        'New IB Lead Assigned: #${lead.id} — ${lead.companyName}';
+    final defaultBody = 'Hi ${assignment.ibRm.name},\n\n'
+        'A new IB lead has been assigned to you.\n\n'
+        'Lead ID: #${lead.id}\n'
+        'Client: ${lead.companyName}\n'
+        'Deal Type: ${lead.dealTypeDisplay}\n'
+        'Deal Size: $dealSize\n'
+        'Created by: ${lead.createdByName}\n\n'
+        'Please review in JM Matrix.\n\n'
+        'Regards,\nJM Matrix';
+    final preview = await showEmailPreviewSheet(
+      context,
+      toLabel: '${assignment.ibRm.name} <${assignment.ibRm.email}>',
+      ccList: assignment.ccList,
+      initialSubject: defaultSubject,
+      initialBody: defaultBody,
+    );
+    if (preview == null) return;
+    if (!mounted) return;
+
+    // Step 3: Persist approval + assignment, then fire notifications using the
+    // (possibly edited) email content the Admin confirmed.
     setState(() => _busy = true);
     final approved = await _repo.approve(
-      _lead!.id,
+      lead.id,
       branchHeadId: user.id,
       branchHeadName: user.name,
     );
@@ -79,34 +110,39 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       assignedAt: DateTime.now(),
       assignmentCcList: assignment.ccList,
     );
-    await _repo.saveDraft(assigned); // upserts via _put
+    await _repo.saveDraft(assigned);
     if (!mounted) return;
-    // Fire mock notifications per the routing spec:
-    // 1. RM gets in-app + email: "Your IB lead #<ID> approved. SPOC: <Name>, <Email>, <Mobile>"
+
+    // RM gets a confirmation notification.
     MockNotificationQueue.pushInApp(
       recipientId: assigned.createdById,
       recipientName: assigned.createdByName,
       title: 'IB lead approved',
-      body: 'Your IB lead #${assigned.id} has been approved. SPOC: ${assignment.ibRm.name}, ${assignment.ibRm.email}.',
+      body:
+          'Your IB lead #${assigned.id} has been approved. SPOC: ${assignment.ibRm.name}, ${assignment.ibRm.email}.',
       deepLink: '/ib-leads/${assigned.id}',
     );
     MockNotificationQueue.pushEmail(
       to: '${assigned.createdByName.toLowerCase().replaceAll(' ', '.')}@jmfs.in',
       subject: 'IB Lead #${assigned.id} Approved — SPOC: ${assignment.ibRm.name}',
-      body: 'Hi ${assigned.createdByName},\n\nYour IB lead #${assigned.id} (${assigned.companyName}) has been approved.\n\nSPOC: ${assignment.ibRm.name}\nEmail: ${assignment.ibRm.email}\n\nRegards,\nJM Matrix',
+      body:
+          'Hi ${assigned.createdByName},\n\nYour IB lead #${assigned.id} (${assigned.companyName}) has been approved.\n\nSPOC: ${assignment.ibRm.name}\nEmail: ${assignment.ibRm.email}\n\nRegards,\nJM Matrix',
     );
-    // 2. IB SPOC gets in-app + email: "New IB lead assigned: #<ID>, Client: <Name>. Created by: <RM Name>."
+
+    // IB SPOC gets the in-app ping + the Admin-reviewed email.
     MockNotificationQueue.pushInApp(
       recipientId: assignment.ibRm.id,
       recipientName: assignment.ibRm.name,
       title: 'New IB lead assigned',
-      body: 'New IB lead assigned: #${assigned.id}, Client: ${assigned.companyName}. Created by: ${assigned.createdByName}.',
+      body:
+          'New IB lead assigned: #${assigned.id}, Client: ${assigned.companyName}. Created by: ${assigned.createdByName}.',
       deepLink: '/ib-leads/${assigned.id}',
     );
     MockNotificationQueue.pushEmail(
       to: assignment.ibRm.email,
-      subject: 'New IB Lead Assigned: #${assigned.id} — ${assigned.companyName}',
-      body: 'Hi ${assignment.ibRm.name},\n\nA new IB lead has been assigned to you.\n\nLead ID: #${assigned.id}\nClient: ${assigned.companyName}\nDeal Type: ${assigned.dealTypeDisplay}\nCreated by: ${assigned.createdByName}\n\nPlease review in JM Matrix.\n\nRegards,\nJM Matrix',
+      cc: assignment.ccList.isEmpty ? null : assignment.ccList.join(', '),
+      subject: preview.subject,
+      body: preview.body,
     );
     await _notifications.push(
       topic: 'rm-${assigned.createdById}',
@@ -114,8 +150,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
         id: 'NTF_${DateTime.now().millisecondsSinceEpoch}',
         type: NotificationType.ibLeadApproved,
         title: 'IB lead approved',
-        body:
-            '${assigned.companyName} assigned to ${assignment.ibRm.name}',
+        body: '${assigned.companyName} assigned to ${assignment.ibRm.name}',
         deepLink: '/ib-leads/${assigned.id}',
         createdAt: DateTime.now(),
         recipientUserId: assigned.createdById,
@@ -126,56 +161,12 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       _lead = assigned;
       _busy = false;
     });
-    // #6: Show email preview post-approval
-    _showEmailPreview(assigned);
     showCompassSnack(
-      // ignore: use_build_context_synchronously
       context,
-      message: 'Approved — assigned to ${assignment.ibRm.name}. Email notifications sent.',
+      message:
+          'Approved — assigned to ${assignment.ibRm.name}. Email sent.',
       type: CompassSnackType.success,
     );
-  }
-
-  void _showEmailPreview(IbLeadModel lead) {
-    final subject = 'New IB lead pending review: ${lead.companyName} (#${lead.id})';
-    final body = 'Hi Sonia,\n\n'
-        'A new IB lead has been submitted by ${lead.createdByName}.\n\n'
-        'Company: ${lead.companyName}\n'
-        'Deal Type: ${lead.dealTypeDisplay}\n'
-        'Deal Size: ${lead.dealValue != null ? IndianCurrencyFormatter.shortForm(lead.dealValue!) : lead.dealValueRange.label}\n\n'
-        'Please review and take action in JM Matrix.\n\n'
-        'Regards,\nJM Matrix System';
-    MockNotificationQueue.pushEmail(
-      to: 'sonia.parekh@jmfs.in',
-      subject: subject,
-      body: body,
-    );
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Email Preview (Mock)'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('To: sonia.parekh@jmfs.in', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text('Subject: $subject', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Text(body, style: AppTextStyles.bodySmall),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-    showCompassSnack(context, message: 'Email queued (mock)', type: CompassSnackType.success);
   }
 
   Future<void> _dropIbLead() async {

@@ -440,8 +440,8 @@ class _LeadHeroHeader extends StatelessWidget {
                 icon: const Icon(Icons.more_vert, color: Colors.white, size: 22),
                 onSelected: onMenu,
                 position: PopupMenuPosition.under,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
                     value: 'edit',
                     child: ListTile(
                       dense: true,
@@ -450,16 +450,18 @@ class _LeadHeroHeader extends StatelessWidget {
                       title: Text('Edit details'),
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'ib',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.swap_horiz, size: 20),
-                      title: Text('Convert to IB Lead'),
+                  // Hide Convert-to-IB when this lead is already linked to an IB lead.
+                  if (lead.ibLeadIds.isEmpty)
+                    const PopupMenuItem(
+                      value: 'ib',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.swap_horiz, size: 20),
+                        title: Text('Convert to IB Lead'),
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'drop',
                     child: ListTile(
                       dense: true,

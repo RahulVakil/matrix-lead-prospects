@@ -229,7 +229,7 @@ class _MisAssignmentSheetState extends State<_MisAssignmentSheet> {
                     Expanded(
                       flex: 2,
                       child: CompassButton(
-                        label: 'Approve & Send',
+                        label: 'Next: Review email',
                         onPressed: _pick == null
                             ? null
                             : () {

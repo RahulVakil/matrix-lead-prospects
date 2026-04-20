@@ -692,35 +692,10 @@ class _LeadRequestsTab extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${r.requested} leads requested · ${r.currentAllocation} currently allocated',
-                          style: AppTextStyles.bodySmall
-                              .copyWith(color: AppColors.textSecondary),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          showCompassSnack(context,
-                              message:
-                                  'Allocation flow — select leads from pool and assign to ${r.name}',
-                              type: CompassSnackType.success);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.navyPrimary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 8),
-                          minimumSize: Size.zero,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: const Text('Allocate'),
-                      ),
-                    ],
+                  Text(
+                    '${r.requested} leads requested · ${r.currentAllocation} currently allocated',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -777,26 +752,17 @@ class _MappedLeadsTab extends StatelessWidget {
                 border: Border.all(
                     color: AppColors.borderDefault.withValues(alpha: 0.5)),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l.fullName,
-                            style: AppTextStyles.labelLarge
-                                .copyWith(fontWeight: FontWeight.w600)),
-                        Text(
-                          'RM: ${l.assignedRmName} · ${l.stage.label} · $daysSince days ago',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textHint),
-                        ),
-                      ],
-                    ),
+                  Text(l.fullName,
+                      style: AppTextStyles.labelLarge
+                          .copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    'RM: ${l.assignedRmName} · ${l.stage.label} · $daysSince days ago',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textHint),
                   ),
-                  // #4: Return to Pool removed from Mapped tab per spec.
-                  const Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.textHint),
                 ],
               ),
             );

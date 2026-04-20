@@ -169,8 +169,6 @@ class _InboxBodyState extends State<_InboxBody> {
                         DropdownMenuItem(
                             value: 'name', child: Text('Name A – Z')),
                         DropdownMenuItem(
-                            value: 'aum', child: Text('AUM (high → low)')),
-                        DropdownMenuItem(
                             value: 'created_desc',
                             child: Text('Created (latest)')),
                         DropdownMenuItem(

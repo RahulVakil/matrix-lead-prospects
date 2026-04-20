@@ -116,18 +116,45 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
               children: [
                 const CompassSectionHeader(title: 'Actions'),
                 const SizedBox(height: 12),
-                CompassButton(
-                  label: 'Capture IB Lead',
-                  icon: Icons.business_center,
-                  onPressed: () => context.push(
-                    '/ib-leads/new',
-                    extra: {
-                      'clientName': c.fullName,
-                      'clientCode': c.clientCode,
-                      'companyName': c.groupName,
-                    },
+                if (c.hasIbLead)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.navyPrimary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: AppColors.navyPrimary.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.business_center,
+                            size: 16, color: AppColors.navyPrimary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Already tagged as an IB lead — a new IB lead cannot be captured for this client.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.navyPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  CompassButton(
+                    label: 'Capture IB Lead',
+                    icon: Icons.business_center,
+                    onPressed: () => context.push(
+                      '/ib-leads/new',
+                      extra: {
+                        'clientName': c.fullName,
+                        'clientCode': c.clientCode,
+                        'companyName': c.groupName,
+                      },
+                    ),
                   ),
-                ),
               ],
             ),
           ),
