@@ -468,7 +468,7 @@ class _ClaimRow extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${lead.vertical} · ${lead.source.label}',
+                        lead.source.label,
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.textHint,
                         ),

@@ -277,20 +277,15 @@ class _IbLeadCard extends StatelessWidget {
     };
   }
 
-  Color _tempColor(IbLeadTemperature t) => switch (t) {
-        IbLeadTemperature.hot => AppColors.errorRed,
-        IbLeadTemperature.warm => AppColors.warmAmber,
-        IbLeadTemperature.cold => AppColors.coldBlue,
-      };
-
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor(lead.status);
     final isSentBack = lead.status == IbLeadStatus.sentBack;
+    // #12 — tint the card by status color so the status is readable at a glance.
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: AppColors.surfacePrimary,
+        color: statusColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -300,7 +295,7 @@ class _IbLeadCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: AppColors.borderDefault.withValues(alpha: 0.5)),
+                  color: statusColor.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

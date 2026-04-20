@@ -169,6 +169,8 @@ class _InboxBodyState extends State<_InboxBody> {
                         DropdownMenuItem(
                             value: 'name', child: Text('Name A – Z')),
                         DropdownMenuItem(
+                            value: 'aum', child: Text('AUM (high → low)')),
+                        DropdownMenuItem(
                             value: 'created_desc',
                             child: Text('Created (latest)')),
                         DropdownMenuItem(
@@ -241,6 +243,7 @@ class _InboxBodyState extends State<_InboxBody> {
                                   showCreatedDate: showDate,
                                   isMyLead: isTl &&
                                       lead.assignedRmId == user?.id,
+                                  highlightQuery: state.searchQuery,
                                   onTap: () => context.push(
                                     RouteNames.leadDetailPath(lead.id),
                                   ),
@@ -444,13 +447,43 @@ class _LeadCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool showCreatedDate;
   final bool isMyLead; // TL-2: badge when TL created this lead
+  final String? highlightQuery;
 
   const _LeadCard({
     required this.lead,
     required this.onTap,
     this.showCreatedDate = false,
     this.isMyLead = false,
+    this.highlightQuery,
   });
+
+  /// Smart-search highlight (#2): wrap matched substring in a soft yellow
+  /// background + bold. Case-insensitive.
+  TextSpan _highlightedName(String name, TextStyle baseStyle) {
+    final q = (highlightQuery ?? '').trim();
+    if (q.isEmpty) return TextSpan(text: name, style: baseStyle);
+    final lowerName = name.toLowerCase();
+    final lowerQ = q.toLowerCase();
+    final idx = lowerName.indexOf(lowerQ);
+    if (idx < 0) return TextSpan(text: name, style: baseStyle);
+    final before = name.substring(0, idx);
+    final match = name.substring(idx, idx + q.length);
+    final after = name.substring(idx + q.length);
+    return TextSpan(
+      style: baseStyle,
+      children: [
+        TextSpan(text: before),
+        TextSpan(
+          text: match,
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.w800,
+            backgroundColor: AppColors.warmAmber.withValues(alpha: 0.22),
+          ),
+        ),
+        TextSpan(text: after),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -487,13 +520,15 @@ class _LeadCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Name
-                      Text(
-                        PiiDisplay.nameFor(
-                            lead.fullName, lead.consentStatus),
-                        style: AppTextStyles.labelLarge.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                      // Name (with smart-search highlight #2)
+                      Text.rich(
+                        _highlightedName(
+                          PiiDisplay.nameFor(
+                              lead.fullName, lead.consentStatus),
+                          AppTextStyles.labelLarge.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
