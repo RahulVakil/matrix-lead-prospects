@@ -83,9 +83,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
         'Client: ${lead.companyName}\n'
         'Deal Type: ${lead.dealTypeDisplay}\n'
         'Deal Size: $dealSize\n'
-        'Created by: ${lead.createdByName}\n\n'
-        'Please review in JM Matrix.\n\n'
-        'Regards,\nJM Matrix';
+        'Created by: ${lead.createdByName}';
     final preview = await showEmailPreviewSheet(
       context,
       toLabel: '${assignment.ibRm.name} <${assignment.ibRm.email}>',
@@ -126,7 +124,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       to: '${assigned.createdByName.toLowerCase().replaceAll(' ', '.')}@jmfs.in',
       subject: 'IB Lead #${assigned.id} Approved — SPOC: ${assignment.ibRm.name}',
       body:
-          'Hi ${assigned.createdByName},\n\nYour IB lead #${assigned.id} (${assigned.companyName}) has been approved.\n\nSPOC: ${assignment.ibRm.name}\nEmail: ${assignment.ibRm.email}\n\nRegards,\nJM Matrix',
+          'Hi ${assigned.createdByName},\n\nYour IB lead #${assigned.id} (${assigned.companyName}) has been approved.\n\nSPOC: ${assignment.ibRm.name}\nEmail: ${assignment.ibRm.email}',
     );
 
     // IB SPOC gets the in-app ping + the Admin-reviewed email.
@@ -426,10 +424,15 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     final lead = _lead!;
     final isCreator = user?.id == lead.createdById;
     // Section 7.6: RM/TL/IB can update status; Admin is read-only.
-    // Terminal progress states (Mandate Won / Lost / Declined) lock further updates.
-    final isProgressTerminal = lead.latestProgressStatus?.isTerminal ?? false;
+    // Lock the Update Status action only when the IB team has Declined the
+    // lead (the one progress status that means "we will not pursue"). Mandate
+    // Won and Mandate Lost still permit follow-up notes — the deal closed but
+    // the conversation may not be archived yet. Sent Back / Dropped lead
+    // statuses are pre-approval and already excluded by the isApproved guard.
+    final isDeclined =
+        lead.latestProgressStatus == IbProgressStatus.declined;
     final canLogProgress = lead.status.isApproved &&
-        !isProgressTerminal &&
+        !isDeclined &&
         (user?.role == UserRole.rm ||
          user?.role == UserRole.teamLead ||
          user?.role == UserRole.ib);

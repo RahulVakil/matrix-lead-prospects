@@ -23,3 +23,16 @@ Track corrections and patterns here so they aren't repeated.
 ### DPDP masking
 - Apply `PiiDisplay.nameFor()` on list surfaces (Lead Inbox, Get Lead claims, Manage Pool Dropped). Client list left unmasked (implied consent post-onboarding).
 - Confidential IB leads: mask company name + contacts from non-creator viewers until lead is assigned.
+
+---
+
+## 2026-04-28 — Session 2
+
+### AskUserQuestion answer fidelity
+- **Rule:** When the user picks one option in `AskUserQuestion`, do NOT silently apply behaviors from the rejected options. The discriminator between options is meaningful — the option not picked was actively rejected.
+- **Specific incident:** I asked "Add Declined to IbProgressStatus only (terminal, separate from Dropped)" vs "Same as above + treat Declined as a final state that locks further updates". User picked option 1 (no lock). I implemented option 2 anyway, adding `!isProgressTerminal` to `canLogProgress`. Result: Mandate Won and Mandate Lost ended up locking the Update Status button — a regression the user had to flag in the next session.
+- **Going forward:** If an option contains added behavior beyond the baseline and the user picks the baseline, treat the added behavior as forbidden until explicitly asked for.
+
+### "Terminal" ≠ "locked"
+- A terminal status in an enum means no further automatic state transitions. It does NOT imply the user is locked out of adding documentation, notes, or further updates to the underlying record.
+- Before tying a write-lock to enum values (`if (status.isTerminal) hideButton`), confirm intent. Default to permissive: a status name signals position in a workflow, not a permission boundary.

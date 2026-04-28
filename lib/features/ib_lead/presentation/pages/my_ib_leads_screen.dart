@@ -221,14 +221,19 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
                     _SentBackStrip(leads: sentBack),
                     const SizedBox(height: 14),
                   ],
-                  if (role != UserRole.ib)
+                  if (role != UserRole.ib) ...[
+                    const _FilterGroupLabel('Approval status'),
+                    const SizedBox(height: 6),
                     _StatusFilterBar(
                       value: _statusFilter,
                       onChanged: (s) => setState(() => _statusFilter = s),
                       counts: _statusCounts(),
                       role: role,
                     ),
-                  if (role != UserRole.ib) const SizedBox(height: 8),
+                    const SizedBox(height: 12),
+                  ],
+                  const _FilterGroupLabel('Progress status (30-day cycle)'),
+                  const SizedBox(height: 6),
                   _ProgressFilterBar(
                     selected: _progressFilter,
                     awaitingSelected: _progressAwaitingFilter,
@@ -643,6 +648,27 @@ class _StatusFilterBar extends StatelessWidget {
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Filter group label (muted caption shown above each chip row)
+// ─────────────────────────────────────────────────────────────────────
+
+class _FilterGroupLabel extends StatelessWidget {
+  final String text;
+  const _FilterGroupLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: AppTextStyles.caption.copyWith(
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.4,
       ),
     );
   }
