@@ -30,6 +30,7 @@ class MockCoverageRepository implements CoverageRepository {
   Future<CoverageCheckResult> checkCoverage({
     String? name,
     String? phone,
+    String? email,
     String? company,
     String? groupName,
   }) async {
@@ -41,6 +42,24 @@ class MockCoverageRepository implements CoverageRepository {
       final match = _records.where((r) {
         final rp = r.phone?.replaceAll(RegExp(r'\s+'), '') ?? '';
         return rp.isNotEmpty && (rp.endsWith(normPhone) || normPhone.endsWith(rp));
+      }).toList();
+      if (match.isNotEmpty) {
+        final hit = match.first;
+        final family = _findFamily(hit);
+        return hit.source == CoverageSource.clientMaster
+            ? CoverageCheckResult.existingClient(hit, familyMatch: family)
+            : CoverageCheckResult.duplicateLead(hit, familyMatch: family);
+      }
+    }
+
+    // Email match → tier-2 signal (added when wealth Add Lead made phone
+    // optional; treat as a strong match if the email matches an existing
+    // client / lead exactly).
+    if (email != null && email.isNotEmpty) {
+      final normEmail = email.toLowerCase().trim();
+      final match = _records.where((r) {
+        final re = (r.email ?? '').toLowerCase().trim();
+        return re.isNotEmpty && re == normEmail;
       }).toList();
       if (match.isNotEmpty) {
         final hit = match.first;

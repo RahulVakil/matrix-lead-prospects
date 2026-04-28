@@ -33,7 +33,7 @@ class _EditLeadBodyState extends State<_EditLeadBody> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.lead.fullName);
-    _phone = TextEditingController(text: widget.lead.phone);
+    _phone = TextEditingController(text: widget.lead.phone ?? '');
     _email = TextEditingController(text: widget.lead.email ?? '');
     _company = TextEditingController(text: widget.lead.companyName ?? '');
     _city = TextEditingController(text: widget.lead.city ?? '');

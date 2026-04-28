@@ -9,6 +9,7 @@ import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/models/consent_record.dart';
 import '../../../../core/models/coverage_check_result.dart';
+import '../../../../core/models/key_contact_model.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/coverage_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
@@ -22,12 +23,16 @@ import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../../core/widgets/key_contacts_field.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../coverage/presentation/widgets/coverage_result_sheet.dart';
 
-/// Create Lead — full capture form with entity type, structured name,
-/// family/group with inline coverage, expanded sources, connect-rep.
+/// Create Lead form. Captures the wealth team's prospect intake — entity type
+/// is a single 9-value dropdown (Individual + 7 non-individual + Others with a
+/// free-text qualifier). Mobile and email are both optional; coverage runs as
+/// either becomes long enough to dedupe against. Non-individual leads expose
+/// a Key Contact section reusing the IB-side `KeyContactsField` widget.
 class CreateLeadScreen extends StatefulWidget {
   const CreateLeadScreen({super.key});
 
@@ -40,65 +45,63 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
   // Entity type
   LeadEntityType _entityType = LeadEntityType.individual;
-  LeadSubType? _subType;
+  final _entityTypeOtherCtrl = TextEditingController();
 
   // Name fields
   final _firstNameCtrl = TextEditingController();
   final _middleNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
-  final _fullNameCtrl = TextEditingController(); // non-individual
-  final _familyGroupCtrl = TextEditingController();
+  final _entityNameCtrl = TextEditingController(); // non-individual single field
+  final _companyNameCtrl = TextEditingController(); // optional, both types
 
-  // Contact
+  // Contact (both optional)
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneFocus = FocusNode();
+  final _emailFocus = FocusNode();
 
   // Source
   LeadSource? _source;
 
-  // Connect rep
-  bool _hasRequestedConnect = false;
-  final _repNameCtrl = TextEditingController();
-  final _repPhoneCtrl = TextEditingController();
-  final _repEmailCtrl = TextEditingController();
+  // Key contacts (only emitted when non-individual)
+  List<KeyContactModel> _keyContacts = const [];
 
   // State
   bool _saving = false;
   bool _checkingCoverage = false;
   CoverageCheckResult? _coverage;
-  bool _consentGranted = false;
-  Timer? _nameDebounce;
+  Timer? _coverageDebounce;
 
   @override
   void initState() {
     super.initState();
     _phoneFocus.addListener(_onPhoneBlur);
+    _emailFocus.addListener(_onEmailBlur);
   }
 
   @override
   void dispose() {
-    _nameDebounce?.cancel();
+    _coverageDebounce?.cancel();
     _phoneFocus.removeListener(_onPhoneBlur);
+    _emailFocus.removeListener(_onEmailBlur);
     _phoneFocus.dispose();
+    _emailFocus.dispose();
+    _entityTypeOtherCtrl.dispose();
     _firstNameCtrl.dispose();
     _middleNameCtrl.dispose();
     _lastNameCtrl.dispose();
-    _fullNameCtrl.dispose();
-    _familyGroupCtrl.dispose();
+    _entityNameCtrl.dispose();
+    _companyNameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
-    _repNameCtrl.dispose();
-    _repPhoneCtrl.dispose();
-    _repEmailCtrl.dispose();
     super.dispose();
   }
 
   // ── Computed name ──────────────────────────────────────────────────
 
   String get _computedName {
-    if (_entityType == LeadEntityType.nonIndividual) {
-      return _fullNameCtrl.text.trim();
+    if (!_entityType.isIndividual) {
+      return _entityNameCtrl.text.trim();
     }
     final parts = [
       _firstNameCtrl.text.trim(),
@@ -115,27 +118,37 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
     if (_phoneCtrl.text.trim().length >= 10) _runCoverage();
   }
 
-  void _onNameOrFamilyChanged(String _) {
-    _nameDebounce?.cancel();
-    _nameDebounce = Timer(const Duration(milliseconds: 600), () {
-      if (_computedName.length >= 3 || _familyGroupCtrl.text.trim().length >= 3) {
-        _runCoverage();
-      }
+  void _onEmailBlur() {
+    if (_emailFocus.hasFocus) return;
+    if (_emailCtrl.text.trim().contains('@')) _runCoverage();
+  }
+
+  void _onTriggerFieldChanged(String _) {
+    _coverageDebounce?.cancel();
+    _coverageDebounce = Timer(const Duration(milliseconds: 600), () {
+      final hasName = _computedName.length >= 3;
+      final hasCompany = _companyNameCtrl.text.trim().length >= 3;
+      final hasEmail = _emailCtrl.text.trim().contains('@');
+      if (hasName || hasCompany || hasEmail) _runCoverage();
     });
   }
 
   Future<void> _runCoverage() async {
     final name = _computedName;
     final phone = _phoneCtrl.text.trim();
-    final family = _familyGroupCtrl.text.trim();
-    if (name.isEmpty && phone.isEmpty && family.isEmpty) return;
+    final email = _emailCtrl.text.trim();
+    final company = _companyNameCtrl.text.trim();
+    if (name.isEmpty && phone.isEmpty && email.isEmpty && company.isEmpty) {
+      return;
+    }
 
     setState(() => _checkingCoverage = true);
     final result = await getIt<CoverageRepository>().checkCoverage(
       name: name.isEmpty ? null : name,
       phone: phone.length >= 10 ? phone : null,
-      company: family.isEmpty ? null : family,
-      groupName: family.isEmpty ? null : family,
+      email: email.contains('@') ? email : null,
+      company: company.isEmpty ? null : company,
+      groupName: company.isEmpty ? null : company,
     );
     if (!mounted) return;
     setState(() {
@@ -162,15 +175,30 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
   // ── Save ───────────────────────────────────────────────────────────
 
-  /// Hard block (#7): both existingClient AND duplicateLead block submit.
+  /// Hard block: both existingClient AND duplicateLead block submit.
   bool get _isDuplicate =>
       _coverage?.status == CoverageStatus.existingClient ||
       _coverage?.status == CoverageStatus.duplicateLead;
 
+  /// Validation rules:
+  ///   - Name (computed for individual / entity name for non-individual) required.
+  ///   - When entityType == others, the free-text qualifier is mandatory.
+  ///   - Source required.
+  ///   - For non-individual: at least one valid Key Contact.
+  ///   - Mobile and email are BOTH optional per spec.
   bool get _canSave {
-    final hasName = _computedName.isNotEmpty;
-    final hasPhone = _phoneCtrl.text.trim().length >= 10;
-    return hasName && hasPhone && _source != null && _consentGranted && !_isDuplicate;
+    if (_computedName.isEmpty) return false;
+    if (_source == null) return false;
+    if (_isDuplicate) return false;
+    if (_entityType == LeadEntityType.others &&
+        _entityTypeOtherCtrl.text.trim().isEmpty) {
+      return false;
+    }
+    if (!_entityType.isIndividual) {
+      if (_keyContacts.isEmpty) return false;
+      if (!_keyContacts.first.isValid) return false;
+    }
+    return true;
   }
 
   Future<void> _save() async {
@@ -182,6 +210,9 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
     setState(() => _saving = true);
     final now = DateTime.now();
     final leadId = 'LEAD_${now.millisecondsSinceEpoch}';
+    // Auto-granted consent record so retention banner / data export keep
+    // their existing semantics. The DPDP capture UI was retired from this
+    // form per business request.
     final consent = ConsentRecord(
       id: 'CON_${now.millisecondsSinceEpoch}',
       leadId: leadId,
@@ -192,32 +223,36 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       purposeStatement: DataConsentType.leadCapture.purposeStatement,
     );
 
+    final phone = _phoneCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final company = _companyNameCtrl.text.trim();
+
     final lead = LeadModel(
       id: leadId,
       entityType: _entityType,
-      subType: _entityType == LeadEntityType.nonIndividual ? _subType : null,
+      entityTypeOther: _entityType == LeadEntityType.others
+          ? _entityTypeOtherCtrl.text.trim()
+          : null,
       fullName: _computedName,
-      firstName: _entityType == LeadEntityType.individual
+      firstName: _entityType.isIndividual
           ? _firstNameCtrl.text.trim()
           : null,
-      middleName: _entityType == LeadEntityType.individual
+      middleName: _entityType.isIndividual
           ? (_middleNameCtrl.text.trim().isEmpty
               ? null
               : _middleNameCtrl.text.trim())
           : null,
-      lastName: _entityType == LeadEntityType.individual
+      lastName: _entityType.isIndividual
           ? _lastNameCtrl.text.trim()
           : null,
-      phone: _phoneCtrl.text.trim(),
-      email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-      groupName: _familyGroupCtrl.text.trim().isEmpty
-          ? null
-          : _familyGroupCtrl.text.trim(),
-      companyName: _entityType == LeadEntityType.nonIndividual
-          ? _fullNameCtrl.text.trim()
-          : (_familyGroupCtrl.text.trim().isEmpty
-              ? null
-              : _familyGroupCtrl.text.trim()),
+      phone: phone.isEmpty ? null : phone,
+      email: email.isEmpty ? null : email,
+      // Company Name maps to both `companyName` (display) and `groupName`
+      // (coverage de-dupe key) so existing coverage / family-link logic
+      // keeps working unchanged.
+      companyName: company.isEmpty ? null : company,
+      groupName: company.isEmpty ? null : company,
+      keyContacts: _entityType.isIndividual ? const [] : _keyContacts,
       source: _source!,
       stage: LeadStage.lead,
       score: _source!.baseScore,
@@ -227,10 +262,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       updatedAt: now,
       consentStatus: ConsentStatus.granted,
       consentRecords: [consent],
-      hasRequestedConnect: _hasRequestedConnect,
-      connectRepName: _hasRequestedConnect ? _repNameCtrl.text.trim() : null,
-      connectRepPhone: _hasRequestedConnect ? _repPhoneCtrl.text.trim() : null,
-      connectRepEmail: _hasRequestedConnect ? _repEmailCtrl.text.trim() : null,
     );
 
     await getIt<LeadRepository>().createLead(lead);
@@ -295,80 +326,37 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
           children: [
-            // ── Entity type toggle ──────────────────────────────
+            // ── Lead type (single 9-value dropdown) ──────────────
             const CompassSectionHeader(title: 'Lead type'),
             const SizedBox(height: 10),
-            Row(
-              children: LeadEntityType.values.map((t) {
-                final selected = _entityType == t;
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: t == LeadEntityType.individual ? 5 : 0,
-                      left: t == LeadEntityType.nonIndividual ? 5 : 0,
-                    ),
-                    child: GestureDetector(
-                      onTap: () => setState(() {
-                        _entityType = t;
-                        _coverage = null;
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? AppColors.navyPrimary
-                              : AppColors.surfacePrimary,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: selected
-                                ? AppColors.navyPrimary
-                                : AppColors.borderDefault,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            t.label,
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: selected
-                                  ? Colors.white
-                                  : AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+            CompassDropdown<LeadEntityType>(
+              label: 'Lead type',
+              isRequired: true,
+              value: _entityType,
+              hint: 'Select type',
+              items: LeadEntityType.values
+                  .map((t) => CompassDropdownItem(value: t, label: t.label))
+                  .toList(),
+              onChanged: (v) => setState(() {
+                _entityType = v ?? LeadEntityType.individual;
+                _coverage = null;
+                if (_entityType.isIndividual) {
+                  _keyContacts = const [];
+                }
+              }),
             ),
-
-            // ── Sub-type (Non-Individual only) ──────────────────
-            if (_entityType == LeadEntityType.nonIndividual) ...[
-              const SizedBox(height: 16),
-              CompassDropdown<LeadSubType>(
-                label: 'Entity sub-type',
+            if (_entityType == LeadEntityType.others) ...[
+              const SizedBox(height: 12),
+              CompassTextField(
+                controller: _entityTypeOtherCtrl,
+                label: 'Specify lead type',
                 isRequired: true,
-                value: _subType,
-                hint: 'Select type',
-                items: LeadSubType.values
-                    .map((s) => CompassDropdownItem(value: s, label: s.label))
-                    .toList(),
-                onChanged: (v) => setState(() => _subType = v),
+                hint: 'e.g. Section 8 Company',
+                maxLength: 100,
+                validator: (v) => v == null || v.trim().isEmpty
+                    ? 'Required when Others is selected'
+                    : null,
               ),
-              // RM-3: free-text input when "Others" selected
-              if (_subType == LeadSubType.other) ...[
-                const SizedBox(height: 12),
-                CompassTextField(
-                  label: 'Specify Entity Sub Type',
-                  isRequired: true,
-                  hint: 'e.g. Section 8 Company',
-                  maxLength: 100,
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required when Others is selected' : null,
-                ),
-              ],
             ],
 
             const SizedBox(height: 20),
@@ -376,12 +364,12 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
             // ── Name fields ─────────────────────────────────────
             const CompassSectionHeader(title: 'Name'),
             const SizedBox(height: 10),
-            if (_entityType == LeadEntityType.individual) ...[
+            if (_entityType.isIndividual) ...[
               CompassTextField(
                 controller: _firstNameCtrl,
                 label: 'First name',
                 isRequired: true,
-                onChanged: _onNameOrFamilyChanged,
+                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
@@ -389,34 +377,34 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
               CompassTextField(
                 controller: _middleNameCtrl,
                 label: 'Middle name',
-                onChanged: _onNameOrFamilyChanged,
+                onChanged: _onTriggerFieldChanged,
               ),
               const SizedBox(height: 12),
               CompassTextField(
                 controller: _lastNameCtrl,
                 label: 'Last name',
                 isRequired: true,
-                onChanged: _onNameOrFamilyChanged,
+                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
             ] else ...[
               CompassTextField(
-                controller: _fullNameCtrl,
-                label: 'Full name / Entity name',
+                controller: _entityNameCtrl,
+                label: 'Entity name',
                 isRequired: true,
-                onChanged: _onNameOrFamilyChanged,
+                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
             ],
             const SizedBox(height: 12),
             CompassTextField(
-              controller: _familyGroupCtrl,
-              label: 'Family / Group name',
-              hint: 'Coverage check runs on this',
-              prefixIcon: Icons.family_restroom_outlined,
-              onChanged: _onNameOrFamilyChanged,
+              controller: _companyNameCtrl,
+              label: 'Company Name',
+              hint: 'Optional — used for coverage / family de-dupe',
+              prefixIcon: Icons.business_outlined,
+              onChanged: _onTriggerFieldChanged,
             ),
             const SizedBox(height: 8),
             _CoverageBadge(
@@ -429,28 +417,37 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
             const SizedBox(height: 20),
 
-            // ── Contact ─────────────────────────────────────────
+            // ── Contact (both optional) ──────────────────────────
             const CompassSectionHeader(title: 'Contact'),
             const SizedBox(height: 10),
             CompassTextField(
               controller: _phoneCtrl,
               focusNode: _phoneFocus,
               label: 'Mobile number',
-              isRequired: true,
-              hint: 'Indian or international',
+              hint: 'Optional',
               keyboardType: TextInputType.phone,
               prefixIcon: Icons.phone_outlined,
-              validator: (v) =>
-                  v == null || v.trim().length < 10 ? '10+ digits' : null,
             ),
             const SizedBox(height: 12),
             CompassTextField(
               controller: _emailCtrl,
+              focusNode: _emailFocus,
               label: 'Email',
               hint: 'Optional',
               keyboardType: TextInputType.emailAddress,
               prefixIcon: Icons.email_outlined,
             ),
+
+            // ── Key Contact Person (non-individual only) ────────
+            if (!_entityType.isIndividual) ...[
+              const SizedBox(height: 20),
+              const CompassSectionHeader(title: 'Key contact person'),
+              const SizedBox(height: 10),
+              KeyContactsField(
+                contacts: _keyContacts,
+                onChanged: (next) => setState(() => _keyContacts = next),
+              ),
+            ],
 
             const SizedBox(height: 20),
 
@@ -468,103 +465,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                         onSelected: (v) => setState(() => _source = v),
                       ))
                   .toList(),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Connect rep ─────────────────────────────────────
-            const CompassSectionHeader(title: 'Connect request'),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Lead has requested to connect with a representative?',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                ),
-                Switch(
-                  value: _hasRequestedConnect,
-                  activeColor: AppColors.navyPrimary,
-                  onChanged: (v) => setState(() => _hasRequestedConnect = v),
-                ),
-              ],
-            ),
-            if (_hasRequestedConnect) ...[
-              const SizedBox(height: 12),
-              CompassTextField(
-                controller: _repNameCtrl,
-                label: 'Representative name',
-                isRequired: true,
-              ),
-              const SizedBox(height: 12),
-              CompassTextField(
-                controller: _repPhoneCtrl,
-                label: 'Representative mobile',
-                keyboardType: TextInputType.phone,
-                prefixIcon: Icons.phone_outlined,
-              ),
-              const SizedBox(height: 12),
-              CompassTextField(
-                controller: _repEmailCtrl,
-                label: 'Representative email',
-                keyboardType: TextInputType.emailAddress,
-                prefixIcon: Icons.email_outlined,
-              ),
-            ],
-
-            const SizedBox(height: 20),
-
-            // ── Consent ─────────────────────────────────────────
-            GestureDetector(
-              onTap: () => setState(() => _consentGranted = !_consentGranted),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surfacePrimary,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _consentGranted
-                        ? AppColors.successGreen.withValues(alpha: 0.5)
-                        : AppColors.borderDefault,
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Checkbox(
-                      value: _consentGranted,
-                      activeColor: AppColors.navyPrimary,
-                      onChanged: (v) =>
-                          setState(() => _consentGranted = v ?? false),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Data consent (DPDP Act)',
-                            style: AppTextStyles.labelSmall.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DataConsentType.leadCapture.purposeStatement,
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.textHint,
-                              height: 1.3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ],
         ),
@@ -637,7 +537,6 @@ class _CoverageBadge extends StatelessWidget {
       CoverageStatus.dnd => 'Do not disturb',
     };
 
-    // Show family match if present
     final familyHint = result!.familyMatch != null
         ? ' · Family: ${result!.familyMatch!.groupName} (${result!.familyMatch!.memberCount} members)'
         : '';

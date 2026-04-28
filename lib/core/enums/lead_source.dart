@@ -1,11 +1,9 @@
 enum LeadSource {
-  selfGenerated('Self Generated', 'SRC_SLF', 20),
-  hurun('Hurun', 'SRC_HUR', 25),
-  vcCircle('VC Circle', 'SRC_VCC', 22),
-  referral('Referral', 'SRC_REF', 30),
-  ifa('IFA Partner', 'SRC_IFA', 25),
+  selfGenerated('Self-generated', 'SRC_SLF', 20),
+  referral('Client Referral', 'SRC_REF', 30),
   campaign('Campaign', 'SRC_CAM', 15),
-  digital('Digital', 'SRC_DIG', 12);
+  digital('Digital', 'SRC_DIG', 12),
+  teleCalling('Tele-Calling', 'SRC_TEL', 18);
 
   final String label;
   final String code;

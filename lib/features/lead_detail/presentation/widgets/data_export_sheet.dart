@@ -29,7 +29,7 @@ class _DataExportBody extends StatelessWidget {
     buf.writeln();
     buf.writeln('-- Identity --');
     buf.writeln('Name: ${lead.fullName}');
-    buf.writeln('Phone: ${lead.phone}');
+    if ((lead.phone ?? '').isNotEmpty) buf.writeln('Phone: ${lead.phone}');
     if (lead.email != null) buf.writeln('Email: ${lead.email}');
     if (lead.companyName != null) buf.writeln('Company: ${lead.companyName}');
     if (lead.city != null) buf.writeln('City: ${lead.city}');

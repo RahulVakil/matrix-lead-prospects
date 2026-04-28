@@ -17,6 +17,7 @@ class ClientMasterRecord {
   final String? rmName;
   final String? rmId;
   final String? phone;
+  final String? email;
   final String? city;
   final CoverageSource source;
   final DateTime lastUpdated;
@@ -28,6 +29,7 @@ class ClientMasterRecord {
     this.rmName,
     this.rmId,
     this.phone,
+    this.email,
     this.city,
     required this.source,
     required this.lastUpdated,

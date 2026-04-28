@@ -9,16 +9,6 @@ import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
 
-class ActionTodayItem extends Equatable {
-  final LeadModel lead;
-  final String actionSummary;
-
-  const ActionTodayItem({required this.lead, required this.actionSummary});
-
-  @override
-  List<Object?> get props => [lead.id];
-}
-
 class LeadsDashboardState extends Equatable {
   final bool isLoading;
   final int totalLeads;
@@ -26,7 +16,6 @@ class LeadsDashboardState extends Equatable {
   final int warmCount;
   final int coldCount;
   final int droppedCount;
-  final List<ActionTodayItem> actionToday;
   final Map<LeadStage, int> pipeline;
   final List<IbLeadModel> ibSentBack;
   final String? error;
@@ -38,7 +27,6 @@ class LeadsDashboardState extends Equatable {
     this.warmCount = 0,
     this.coldCount = 0,
     this.droppedCount = 0,
-    this.actionToday = const [],
     this.pipeline = const {},
     this.ibSentBack = const [],
     this.error,
@@ -58,7 +46,7 @@ class LeadsDashboardState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, droppedCount, actionToday.length, pipeline, ibSentBack.length, error];
+  List<Object?> get props => [isLoading, totalLeads, hotCount, warmCount, coldCount, droppedCount, pipeline, ibSentBack.length, error];
 }
 
 class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
@@ -77,16 +65,10 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
       final results = await Future.wait([
         _repo.getLeads(page: 1, pageSize: 500, assignedRmId: filterRmId),
         _repo.getPipelineSummary(rmId), // pipeline still uses rmId for mock
-        _repo.getHotLeads(rmId),
-        _repo.getFollowUpsDueToday(rmId),
-        _repo.getNewAssignments(rmId),
       ]);
 
       final allLeads = (results[0] as dynamic).items as List<LeadModel>;
       final pipeline = results[1] as Map<LeadStage, int>;
-      final hot = results[2] as List<LeadModel>;
-      final followUps = results[3] as List<LeadModel>;
-      final newOnes = results[4] as List<LeadModel>;
 
       // Temperature counts
       var hotC = 0, warmC = 0, coldC = 0;
@@ -103,34 +85,6 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
             break;
           default:
             break;
-        }
-      }
-
-      // Build action-today items — merge hot + follow-ups + new, dedupe, take top 5
-      final seen = <String>{};
-      final actions = <ActionTodayItem>[];
-      for (final l in hot) {
-        if (seen.add(l.id)) {
-          actions.add(ActionTodayItem(
-            lead: l,
-            actionSummary: l.nextAction?.dueDisplay ?? 'Follow up overdue',
-          ));
-        }
-      }
-      for (final l in followUps) {
-        if (seen.add(l.id)) {
-          actions.add(ActionTodayItem(
-            lead: l,
-            actionSummary: l.nextAction?.dueDisplay ?? 'Follow-up due today',
-          ));
-        }
-      }
-      for (final l in newOnes) {
-        if (seen.add(l.id)) {
-          actions.add(ActionTodayItem(
-            lead: l,
-            actionSummary: 'New lead — make first contact',
-          ));
         }
       }
 
@@ -151,7 +105,6 @@ class LeadsDashboardCubit extends Cubit<LeadsDashboardState> {
         warmCount: warmC,
         coldCount: coldC,
         droppedCount: droppedC,
-        actionToday: actions,
         pipeline: pipeline,
         ibSentBack: ibSentBack,
       ));

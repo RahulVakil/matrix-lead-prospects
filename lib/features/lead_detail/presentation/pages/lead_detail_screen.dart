@@ -232,7 +232,11 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             ),
           _QuickActionGrid(
             onCall: () => _logActivity(ActivityType.call),
-            onWhatsApp: () => _openWhatsApp(lead.phone),
+            // WhatsApp tile is dormant when no phone is on file (wealth Add
+            // Lead allows phone-less entries — email-only / walk-in leads).
+            onWhatsApp: (lead.phone == null || lead.phone!.isEmpty)
+                ? null
+                : () => _openWhatsApp(lead.phone!),
             onMeet: () => _logActivity(ActivityType.meeting),
             onNote: () => _logActivity(ActivityType.note),
           ),
@@ -497,7 +501,8 @@ class _LeadHeroHeader extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         lead.companyName ??
-                            PiiDisplay.phoneFor(lead.phone, lead.consentStatus),
+                            PiiDisplay.phoneFor(
+                                lead.phone ?? '', lead.consentStatus),
                         style: AppTextStyles.bodySmall.copyWith(
                           color: Colors.white.withValues(alpha: 0.72),
                         ),
@@ -818,7 +823,9 @@ class _NextActionCallout extends StatelessWidget {
 
 class _QuickActionGrid extends StatelessWidget {
   final VoidCallback onCall;
-  final VoidCallback onWhatsApp;
+  /// Nullable so the WhatsApp tile can be greyed out for leads with no
+  /// phone on file (wealth Add Lead allows phone-less entries).
+  final VoidCallback? onWhatsApp;
   final VoidCallback onMeet;
   final VoidCallback onNote;
 
@@ -844,7 +851,7 @@ class _QuickActionGrid extends StatelessWidget {
     );
   }
 
-  Widget _tile(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _tile(IconData icon, String label, Color color, VoidCallback? onTap) {
     return Expanded(
       child: Material(
         color: AppColors.surfacePrimary,
@@ -1249,7 +1256,9 @@ class _DetailsBlockState extends State<_DetailsBlock>
                       children: [
                         const Divider(height: 1),
                         const SizedBox(height: 12),
-                        _row('Phone', PiiDisplay.phoneFor(l.phone, l.consentStatus)),
+                        if (l.phone != null && l.phone!.isNotEmpty)
+                          _row('Phone',
+                              PiiDisplay.phoneFor(l.phone!, l.consentStatus)),
                         if (l.email != null)
                           _row('Email',
                               PiiDisplay.emailFor(l.email!, l.consentStatus)),

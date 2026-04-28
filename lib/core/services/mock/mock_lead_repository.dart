@@ -35,11 +35,10 @@ class MockLeadRepository implements LeadRepository {
 
   void _seedDemoScenarios() {
     final now = DateTime.now();
-    // Scenario B — Non-Individual, Entity Sub Type = Others, "Section 8 Company"
+    // Scenario B — Non-Individual ("Trust" entity type)
     _leads.insert(0, LeadModel(
       id: 'LEAD_B',
-      entityType: LeadEntityType.nonIndividual,
-      subType: LeadSubType.other,
+      entityType: LeadEntityType.trust,
       fullName: 'Green Earth Foundation',
       phone: '0000000000',
       source: LeadSource.referral,
@@ -549,35 +548,6 @@ class MockLeadRepository implements LeadRepository {
       claimsInLast7Days: claimsIn7,
       wrongContactDropsInLast7Days: wrongContactIn7,
     );
-  }
-
-  @override
-  Future<List<LeadModel>> getHotLeads(String rmId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    return _leads
-        .where((l) => l.assignedRmId == rmId && l.temperature == LeadTemperature.hot && l.isOverdue)
-        .toList()
-      ..sort((a, b) {
-        final aDur = a.timeSinceLastContact?.inHours ?? 999;
-        final bDur = b.timeSinceLastContact?.inHours ?? 999;
-        return bDur.compareTo(aDur);
-      });
-  }
-
-  @override
-  Future<List<LeadModel>> getFollowUpsDueToday(String rmId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    return _leads
-        .where((l) => l.assignedRmId == rmId && l.needsFollowUpToday)
-        .toList();
-  }
-
-  @override
-  Future<List<LeadModel>> getNewAssignments(String rmId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    return _leads
-        .where((l) => l.assignedRmId == rmId && l.isNewAssignment)
-        .toList();
   }
 
   @override

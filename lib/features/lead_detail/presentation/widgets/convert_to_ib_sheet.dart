@@ -86,7 +86,7 @@ class _ConvertToIbSheet extends StatelessWidget {
                   _row('Name', lead.fullName),
                   if ((lead.companyName ?? '').isNotEmpty)
                     _row('Company', lead.companyName!),
-                  _row('Phone', lead.phone),
+                  if ((lead.phone ?? '').isNotEmpty) _row('Phone', lead.phone!),
                   if ((lead.email ?? '').isNotEmpty) _row('Email', lead.email!),
                   if ((lead.city ?? '').isNotEmpty) _row('City', lead.city!),
                   if (lead.estimatedAum != null)

@@ -9,20 +9,28 @@ import 'activity_model.dart';
 import 'admin_action_record.dart';
 import 'consent_record.dart';
 import 'deal_info_model.dart';
+import 'key_contact_model.dart';
 import 'next_action_model.dart';
 import 'profiling_model.dart';
 
 class LeadModel {
   final String id;
   final LeadEntityType entityType;
-  final LeadSubType? subType;
+  /// Free-text qualifier captured when [entityType] is `LeadEntityType.others`.
+  final String? entityTypeOther;
   final String fullName; // computed for Individual, direct for Non-Individual
   final String? firstName;
   final String? middleName;
   final String? lastName;
-  final String phone;
+  /// Optional — both phone and email are user-optional on the wealth Add Lead
+  /// form. Display sites must handle null with `??`. Action launchers
+  /// (Call / WhatsApp / SMS) gate themselves on a non-empty phone.
+  final String? phone;
   final String? email;
   final String? companyName;
+  /// Key contact people for non-individual leads (Partnership, LLP, etc.).
+  /// Empty for individuals.
+  final List<KeyContactModel> keyContacts;
   final bool hasRequestedConnect;
   final String? connectRepName;
   final String? connectRepPhone;
@@ -71,14 +79,15 @@ class LeadModel {
   LeadModel({
     required this.id,
     this.entityType = LeadEntityType.individual,
-    this.subType,
+    this.entityTypeOther,
     required this.fullName,
     this.firstName,
     this.middleName,
     this.lastName,
-    required this.phone,
+    this.phone,
     this.email,
     this.companyName,
+    this.keyContacts = const [],
     this.hasRequestedConnect = false,
     this.connectRepName,
     this.connectRepPhone,
@@ -121,8 +130,18 @@ class LeadModel {
     this.groupName,
   });
 
-  LeadTemperature get temperature =>
-      LeadTemperature.fromScore(score, isDormant: stage == LeadStage.dormant);
+  /// Wealth lead temperature is purely age-based:
+  ///   <30 days from createdAt  → Hot
+  ///   30-90 days                → Warm
+  ///   >90 days                  → Cold
+  /// Dormant stage overrides the age rule.
+  LeadTemperature get temperature {
+    if (stage == LeadStage.dormant) return LeadTemperature.dormant;
+    final ageDays = DateTime.now().difference(createdAt).inDays;
+    if (ageDays < 30) return LeadTemperature.hot;
+    if (ageDays <= 90) return LeadTemperature.warm;
+    return LeadTemperature.cold;
+  }
 
   Duration? get timeSinceLastContact {
     if (lastContactedAt == null) return null;
@@ -174,7 +193,7 @@ class LeadModel {
   LeadModel copyWith({
     String? id,
     LeadEntityType? entityType,
-    LeadSubType? subType,
+    String? entityTypeOther,
     String? fullName,
     String? firstName,
     String? middleName,
@@ -182,6 +201,7 @@ class LeadModel {
     String? phone,
     String? email,
     String? companyName,
+    List<KeyContactModel>? keyContacts,
     bool? hasRequestedConnect,
     String? connectRepName,
     String? connectRepPhone,
@@ -227,7 +247,7 @@ class LeadModel {
     return LeadModel(
       id: id ?? this.id,
       entityType: entityType ?? this.entityType,
-      subType: subType ?? this.subType,
+      entityTypeOther: entityTypeOther ?? this.entityTypeOther,
       fullName: fullName ?? this.fullName,
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
@@ -235,6 +255,7 @@ class LeadModel {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       companyName: companyName ?? this.companyName,
+      keyContacts: keyContacts ?? this.keyContacts,
       hasRequestedConnect: hasRequestedConnect ?? this.hasRequestedConnect,
       connectRepName: connectRepName ?? this.connectRepName,
       connectRepPhone: connectRepPhone ?? this.connectRepPhone,

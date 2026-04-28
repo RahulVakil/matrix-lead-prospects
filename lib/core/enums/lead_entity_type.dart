@@ -1,14 +1,8 @@
-/// Whether the lead is an individual person or a non-individual entity.
+/// The flat list of entity types the wealth team captures today. Replaces
+/// the older Individual / Non-Individual binary plus a separate sub-type
+/// dropdown — the team prefers a single decision in the Add Lead form.
 enum LeadEntityType {
   individual('Individual'),
-  nonIndividual('Non-Individual');
-
-  final String label;
-  const LeadEntityType(this.label);
-}
-
-/// Sub-type for Non-Individual leads.
-enum LeadSubType {
   partnership('Partnership'),
   llp('LLP'),
   huf('HUF'),
@@ -16,8 +10,13 @@ enum LeadSubType {
   publicLtd('Public Limited'),
   trust('Trust'),
   society('Society'),
-  other('Other');
+  others('Others');
 
   final String label;
-  const LeadSubType(this.label);
+  const LeadEntityType(this.label);
+
+  /// True when the lead is a natural person — drives the First/Middle/Last
+  /// name layout vs the single Entity Name field, and gates the Key Contact
+  /// Person section (which only applies to non-individual entities).
+  bool get isIndividual => this == LeadEntityType.individual;
 }

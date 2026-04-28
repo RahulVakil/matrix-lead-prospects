@@ -52,12 +52,6 @@ abstract class LeadRepository {
 
   Future<CoverageCheckResult> checkCoverage(String phone, {String? pan});
 
-  Future<List<LeadModel>> getHotLeads(String rmId);
-
-  Future<List<LeadModel>> getFollowUpsDueToday(String rmId);
-
-  Future<List<LeadModel>> getNewAssignments(String rmId);
-
   Future<Map<LeadStage, int>> getPipelineSummary(String rmId);
 
   /// Set or clear the "next action" attached to a lead. Pass null to clear.

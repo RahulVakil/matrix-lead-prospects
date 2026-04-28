@@ -7,9 +7,12 @@ import '../models/family_group_model.dart';
 /// data sources internally.
 abstract class CoverageRepository {
   /// Real-time coverage check used inline in Create Lead and IB Lead capture.
+  /// Email is included as a tier-2 match signal on the wealth side; the IB
+  /// caller passes only name + company today and is unaffected.
   Future<CoverageCheckResult> checkCoverage({
     String? name,
     String? phone,
+    String? email,
     String? company,
     String? groupName,
   });
