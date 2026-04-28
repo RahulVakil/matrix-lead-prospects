@@ -12,6 +12,7 @@ import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_empty_state.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../../core/widgets/ib_progress_status_pill.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 
@@ -28,7 +29,8 @@ enum _IbSortKey {
   dealSizeDesc('Deal size \u2193'),
   dealSizeAsc('Deal size \u2191'),
   dateNewest('Newest first'),
-  dateOldest('Oldest first');
+  dateOldest('Oldest first'),
+  progressStatus('Progress status');
 
   final String label;
   const _IbSortKey(this.label);
@@ -58,6 +60,10 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
   final Set<IbDealStage> _filterStages = {};
   final Set<IbDealValueRange> _filterSizes = {};
   final Set<_TimelineBucket> _filterTimelines = {};
+  // Progress filter: stores selected IbProgressStatus values.
+  // _filterAwaitingFirstUpdate is a sibling flag for "approved + no entries yet".
+  final Set<IbProgressStatus> _filterProgressStatuses = {};
+  bool _filterAwaitingFirstUpdate = false;
   bool _filtersExpanded = false;
 
   double _sizeOf(IbLeadModel l) =>
@@ -81,6 +87,18 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
         final any = _filterTimelines.any((b) => b.contains(l.timelineMonths!));
         if (!any) return false;
       }
+      // Progress status filter: a lead matches if its latest status is in the
+      // selected set, OR if "Awaiting first update" is selected and the lead
+      // is approved with no progress entries.
+      final progressActive =
+          _filterProgressStatuses.isNotEmpty || _filterAwaitingFirstUpdate;
+      if (progressActive) {
+        final ls = l.latestProgressStatus;
+        final isAwaiting = ls == null && l.status.isApproved;
+        final matches = (ls != null && _filterProgressStatuses.contains(ls)) ||
+            (_filterAwaitingFirstUpdate && isAwaiting);
+        if (!matches) return false;
+      }
       return true;
     }).toList();
 
@@ -97,6 +115,13 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
       case _IbSortKey.dateOldest:
         list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
+      case _IbSortKey.progressStatus:
+        // Sort by IbProgressStatus enum order (In Discussion first, Declined
+        // last). Leads with no progress entry sort to the end.
+        int rank(IbLeadModel l) =>
+            l.latestProgressStatus?.index ?? IbProgressStatus.values.length;
+        list.sort((a, b) => rank(a).compareTo(rank(b)));
+        break;
     }
     return list;
   }
@@ -105,13 +130,17 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
       _filterTypes.isNotEmpty ||
       _filterStages.isNotEmpty ||
       _filterSizes.isNotEmpty ||
-      _filterTimelines.isNotEmpty;
+      _filterTimelines.isNotEmpty ||
+      _filterProgressStatuses.isNotEmpty ||
+      _filterAwaitingFirstUpdate;
 
   void _clearFilters() => setState(() {
         _filterTypes.clear();
         _filterStages.clear();
         _filterSizes.clear();
         _filterTimelines.clear();
+        _filterProgressStatuses.clear();
+        _filterAwaitingFirstUpdate = false;
       });
 
   @override
@@ -190,7 +219,9 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
     final activeFilterCount = _filterTypes.length +
         _filterStages.length +
         _filterSizes.length +
-        _filterTimelines.length;
+        _filterTimelines.length +
+        _filterProgressStatuses.length +
+        (_filterAwaitingFirstUpdate ? 1 : 0);
     return Row(
       children: [
         Expanded(
@@ -338,6 +369,26 @@ class _IbDashboardScreenState extends State<IbDashboardScreen> {
                           : _filterTimelines.add(b)),
                     ))
                 .toList(),
+          ),
+          const SizedBox(height: 10),
+          _filterGroup(
+            'Progress status',
+            [
+              ...IbProgressStatus.values.map((s) => _toggleChip(
+                    label: s.label,
+                    selected: _filterProgressStatuses.contains(s),
+                    onTap: () => setState(() =>
+                        _filterProgressStatuses.contains(s)
+                            ? _filterProgressStatuses.remove(s)
+                            : _filterProgressStatuses.add(s)),
+                  )),
+              _toggleChip(
+                label: 'Awaiting first update',
+                selected: _filterAwaitingFirstUpdate,
+                onTap: () => setState(() =>
+                    _filterAwaitingFirstUpdate = !_filterAwaitingFirstUpdate),
+              ),
+            ],
           ),
           if (_hasAnyFilter)
             Align(
@@ -604,20 +655,28 @@ class _IbCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    ib.status.label,
-                    style: AppTextStyles.caption.copyWith(
-                      color: _statusColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 10.5,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        ib.status.label,
+                        style: AppTextStyles.caption.copyWith(
+                          color: _statusColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.5,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    IbProgressStatusPill(status: ib.latestProgressStatus),
+                  ],
                 ),
               ],
             ),

@@ -14,6 +14,7 @@ import '../../../../core/widgets/compass_empty_state.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../../core/widgets/ib_progress_status_pill.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../../routing/route_names.dart';
 
@@ -38,6 +39,11 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
   bool _loading = true;
   List<IbLeadModel> _leads = [];
   IbLeadStatus? _statusFilter;
+  // Progress status filter — multi-select. The "Awaiting first update"
+  // pseudo-status (approved lead with no progress entries yet) is tracked
+  // separately so it composes with the 6 enum values.
+  final Set<IbProgressStatus> _progressFilter = {};
+  bool _progressAwaitingFilter = false;
   String _searchQuery = '';
 
   @override
@@ -122,6 +128,15 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
         if (_statusFilter == IbLeadStatus.approved) return l.status.isApproved;
         if (_statusFilter == IbLeadStatus.pending) return l.status.isAwaitingReview;
         return l.status == _statusFilter;
+      }).toList();
+    }
+    // Progress status filter — composes with status filter.
+    if (_progressFilter.isNotEmpty || _progressAwaitingFilter) {
+      list = list.where((l) {
+        final ls = l.latestProgressStatus;
+        final isAwaiting = ls == null && l.status.isApproved;
+        return (ls != null && _progressFilter.contains(ls)) ||
+            (_progressAwaitingFilter && isAwaiting);
       }).toList();
     }
     // Search filter (#6)
@@ -213,7 +228,19 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
                       counts: _statusCounts(),
                       role: role,
                     ),
-                  if (role != UserRole.ib) const SizedBox(height: 12),
+                  if (role != UserRole.ib) const SizedBox(height: 8),
+                  _ProgressFilterBar(
+                    selected: _progressFilter,
+                    awaitingSelected: _progressAwaitingFilter,
+                    onToggle: (s) => setState(() {
+                      _progressFilter.contains(s)
+                          ? _progressFilter.remove(s)
+                          : _progressFilter.add(s);
+                    }),
+                    onToggleAwaiting: () => setState(() =>
+                        _progressAwaitingFilter = !_progressAwaitingFilter),
+                  ),
+                  const SizedBox(height: 12),
                   if (_filtered.isEmpty)
                     CompassEmptyState(
                       icon: Icons.account_tree_outlined,
@@ -381,6 +408,14 @@ class _IbLeadCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        // 30-day progress status pill: shown for any approved
+                        // lead, with an "Awaiting update" variant when no
+                        // progress entry exists yet.
+                        if (lead.status.isApproved) ...[
+                          const SizedBox(height: 4),
+                          IbProgressStatusPill(
+                              status: lead.latestProgressStatus),
+                        ],
                         // Overdue / Escalated flags
                         if (lead.isProgressEscalated) ...[
                           const SizedBox(height: 4),
@@ -606,6 +641,69 @@ class _StatusFilterBar extends StatelessWidget {
           style: AppTextStyles.bodySmall.copyWith(
             color: selected ? AppColors.navyPrimary : AppColors.textSecondary,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Progress status filter bar (multi-select)
+// ─────────────────────────────────────────────────────────────────────
+
+class _ProgressFilterBar extends StatelessWidget {
+  final Set<IbProgressStatus> selected;
+  final bool awaitingSelected;
+  final ValueChanged<IbProgressStatus> onToggle;
+  final VoidCallback onToggleAwaiting;
+  const _ProgressFilterBar({
+    required this.selected,
+    required this.awaitingSelected,
+    required this.onToggle,
+    required this.onToggleAwaiting,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final s in IbProgressStatus.values) ...[
+            _chip(s.label, selected.contains(s), () => onToggle(s)),
+            const SizedBox(width: 6),
+          ],
+          _chip('Awaiting first update', awaitingSelected, onToggleAwaiting),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String label, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.navyPrimary.withValues(alpha: 0.12)
+              : AppColors.surfaceTertiary,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.navyPrimary.withValues(alpha: 0.4)
+                : AppColors.borderDefault,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.caption.copyWith(
+            color: isSelected ? AppColors.navyPrimary : AppColors.textSecondary,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 11,
           ),
         ),
       ),

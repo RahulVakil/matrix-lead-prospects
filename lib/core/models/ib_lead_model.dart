@@ -21,11 +21,9 @@ class IbLeadModel {
   final IbDealValueRange dealValueRange;
   final IbDealStage? dealStage;
   final int? timelineMonths; // 0, 2, 4, 6, 8, 10, 12 (12 means "12+")
-  final List<IbIdentifiedHow> identifiedHow;
   final String? notes;
   final bool isConfidential;
   final String? confidentialReason;
-  final bool declarationAccepted;
   final IbLeadStatus status;
   final String createdById;
   final String createdByName;
@@ -66,11 +64,9 @@ class IbLeadModel {
     required this.dealValueRange,
     this.dealStage,
     this.timelineMonths,
-    this.identifiedHow = const [],
     this.notes,
     this.isConfidential = false,
     this.confidentialReason,
-    this.declarationAccepted = false,
     required this.status,
     required this.createdById,
     required this.createdByName,
@@ -172,11 +168,9 @@ class IbLeadModel {
     IbDealValueRange? dealValueRange,
     IbDealStage? dealStage,
     int? timelineMonths,
-    List<IbIdentifiedHow>? identifiedHow,
     String? notes,
     bool? isConfidential,
     String? confidentialReason,
-    bool? declarationAccepted,
     IbLeadStatus? status,
     String? branchHeadId,
     String? branchHeadName,
@@ -206,11 +200,9 @@ class IbLeadModel {
       dealValueRange: dealValueRange ?? this.dealValueRange,
       dealStage: dealStage ?? this.dealStage,
       timelineMonths: timelineMonths ?? this.timelineMonths,
-      identifiedHow: identifiedHow ?? this.identifiedHow,
       notes: notes ?? this.notes,
       isConfidential: isConfidential ?? this.isConfidential,
       confidentialReason: confidentialReason ?? this.confidentialReason,
-      declarationAccepted: declarationAccepted ?? this.declarationAccepted,
       status: status ?? this.status,
       createdById: createdById,
       createdByName: createdByName,

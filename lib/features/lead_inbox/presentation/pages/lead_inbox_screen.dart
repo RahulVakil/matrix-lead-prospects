@@ -9,7 +9,6 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_text_field.dart';
-import '../../../../core/widgets/create_chooser_sheet.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../routing/route_names.dart';
@@ -80,10 +79,12 @@ class _InboxBodyState extends State<_InboxBody> {
         return HeroScaffold(
           header: HeroAppBar.simple(
               title: 'All leads', subtitle: '${state.totalCount} total'),
-          // #8 — FAB uses shared chooser with IB-block (#9)
+          // FAB routes straight to New Wealth Lead. Direct IB lead creation
+          // is disallowed — IB leads must originate from a wealth lead via
+          // the "Convert to IB Lead" 3-dot action on the wealth detail screen.
           floatingActionButton: FloatingActionButton(
             backgroundColor: AppColors.navyPrimary,
-            onPressed: () => showCreateChooser(context),
+            onPressed: () => context.push('/leads/new'),
             child: const Icon(Icons.add, color: Colors.white),
           ),
           body: Column(

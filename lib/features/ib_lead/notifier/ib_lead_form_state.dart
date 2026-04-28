@@ -21,11 +21,9 @@ class IbLeadFormState extends Equatable {
   final IbDealValueRange? dealValueRange;
   final IbDealStage? dealStage;
   final int? timelineMonths;
-  final List<IbIdentifiedHow> identifiedHow;
   final String notes;
   final bool isConfidential;
   final String confidentialReason;
-  final bool declarationAccepted;
 
   final bool isSubmitting;
   final String? submitError;
@@ -50,11 +48,9 @@ class IbLeadFormState extends Equatable {
     this.dealValueRange,
     this.dealStage,
     this.timelineMonths,
-    this.identifiedHow = const [],
     this.notes = '',
     this.isConfidential = false,
     this.confidentialReason = '',
-    this.declarationAccepted = true, // RM-5: pre-ticked by default
     this.isSubmitting = false,
     this.submitError,
     this.isCheckingCoverage = false,
@@ -65,8 +61,7 @@ class IbLeadFormState extends Equatable {
     return companyName.trim().isNotEmpty &&
         dealType != null &&
         (dealType != IbDealType.other || dealTypeOtherText.trim().isNotEmpty) &&
-        (dealValue != null || dealValueRange != null) &&
-        declarationAccepted;
+        (dealValue != null || dealValueRange != null);
   }
 
   IbLeadFormState copyWith({
@@ -89,11 +84,9 @@ class IbLeadFormState extends Equatable {
     int? timelineMonths,
     bool clearTimelineMonths = false,
     bool clearDealStage = false,
-    List<IbIdentifiedHow>? identifiedHow,
     String? notes,
     bool? isConfidential,
     String? confidentialReason,
-    bool? declarationAccepted,
     bool? isSubmitting,
     String? submitError,
     bool? isCheckingCoverage,
@@ -117,11 +110,9 @@ class IbLeadFormState extends Equatable {
       dealStage: clearDealStage ? null : (dealStage ?? this.dealStage),
       timelineMonths:
           clearTimelineMonths ? null : (timelineMonths ?? this.timelineMonths),
-      identifiedHow: identifiedHow ?? this.identifiedHow,
       notes: notes ?? this.notes,
       isConfidential: isConfidential ?? this.isConfidential,
       confidentialReason: confidentialReason ?? this.confidentialReason,
-      declarationAccepted: declarationAccepted ?? this.declarationAccepted,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       submitError: submitError,
       isCheckingCoverage: isCheckingCoverage ?? this.isCheckingCoverage,
@@ -146,11 +137,9 @@ class IbLeadFormState extends Equatable {
         dealValueRange,
         dealStage,
         timelineMonths,
-        identifiedHow,
         notes,
         isConfidential,
         confidentialReason,
-        declarationAccepted,
         isSubmitting,
         submitError,
         isCheckingCoverage,

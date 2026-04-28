@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_dimensions.dart';
-import '../../../../core/widgets/create_chooser_sheet.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 
@@ -14,10 +13,11 @@ class TlDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return HeroScaffold(
       header: HeroAppBar.simple(title: 'Team dashboard', subtitle: 'Pipeline overview'),
-      // TL #3 — same FAB chooser as RM
+      // TL FAB routes straight to New Wealth Lead. Direct IB lead creation
+      // is disallowed app-wide.
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.navyPrimary,
-        onPressed: () => showCreateChooser(context),
+        onPressed: () => context.push('/leads/new'),
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: ListView(

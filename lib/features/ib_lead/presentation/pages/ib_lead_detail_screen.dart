@@ -77,8 +77,8 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
         : lead.dealValueRange.label;
     final defaultSubject =
         'New IB Lead Assigned: #${lead.id} — ${lead.companyName}';
-    final defaultBody = 'Hi ${assignment.ibRm.name},\n\n'
-        'A new IB lead has been assigned to you.\n\n'
+    final defaultBody = 'Dear ${assignment.ibRm.name},\n\n'
+        'Reference below details, please suggest whom we can pass on this referral to.\n\n'
         'Lead ID: #${lead.id}\n'
         'Client: ${lead.companyName}\n'
         'Deal Type: ${lead.dealTypeDisplay}\n'
@@ -238,11 +238,14 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
 
   Widget? _buildBottomBar({
     required bool canDecide,
+    required bool canApproveOrSendBack,
     required bool isCreator,
     required bool canLogProgress,
     required IbLeadModel lead,
   }) {
-    // Admin/MIS: 3 actions (Approve / Send Back / Drop) when lead is actionable
+    // Admin/MIS: Drop is always available; Approve + Send Back only when the
+    // lead is awaiting initial review. For sent-back leads the row collapses
+    // to Drop only.
     if (canDecide) {
       return SafeArea(
         child: Container(
@@ -262,21 +265,23 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
                       onPressed: _busy ? null : _dropIbLead,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: CompassButton.secondary(
-                      label: 'Send Back',
-                      onPressed: _busy ? null : _sendBack,
+                  if (canApproveOrSendBack) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CompassButton.secondary(
+                        label: 'Send Back',
+                        onPressed: _busy ? null : _sendBack,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: CompassButton(
-                      label: 'Approve',
-                      isLoading: _busy,
-                      onPressed: _approve,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CompassButton(
+                        label: 'Approve',
+                        isLoading: _busy,
+                        onPressed: _approve,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ],
@@ -405,16 +410,26 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     }
 
     final user = context.watch<AuthCubit>().state.currentUser;
-    // Admin / MIS can decide on leads that are awaiting review OR sent back.
+    // Admin / MIS action gating:
+    //   - Approve + Send Back are only valid for awaiting-review leads
+    //     (pending / draft). Once a lead is sent back, the ball is in the
+    //     RM's court until they resubmit; Admin/MIS cannot act on it again
+    //     except to abandon it via Drop.
+    //   - Drop is the only escape hatch Admin/MIS retains across both
+    //     awaiting-review and sent-back states.
     final isReviewer = user?.role == UserRole.admin;
     final isActionable = _lead!.status.isAwaitingReview ||
         _lead!.status == IbLeadStatus.sentBack;
     final canDecide = isReviewer && isActionable;
+    final canApproveOrSendBack = isReviewer && _lead!.status.isAwaitingReview;
 
     final lead = _lead!;
     final isCreator = user?.id == lead.createdById;
     // Section 7.6: RM/TL/IB can update status; Admin is read-only.
+    // Terminal progress states (Mandate Won / Lost / Declined) lock further updates.
+    final isProgressTerminal = lead.latestProgressStatus?.isTerminal ?? false;
     final canLogProgress = lead.status.isApproved &&
+        !isProgressTerminal &&
         (user?.role == UserRole.rm ||
          user?.role == UserRole.teamLead ||
          user?.role == UserRole.ib);
@@ -497,23 +512,8 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
                 ),
                 _row('Stage', lead.dealStage?.label ?? '—'),
                 _row('Timeline', lead.timelineDisplay),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          CompassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const CompassSectionHeader(title: 'Context'),
-                const SizedBox(height: 10),
-                _row(
-                  'Identified via',
-                  lead.identifiedHow.map((h) => h.label).join(', '),
-                ),
-                if (lead.notes != null) _row('Notes', lead.notes!),
-                if (lead.isConfidential)
-                  _row('Confidential', 'Yes'),
+                if (lead.notes != null && lead.notes!.trim().isNotEmpty)
+                  _row('Notes', lead.notes!),
               ],
             ),
           ),
@@ -547,6 +547,7 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
       ),
       bottomNavigationBar: _buildBottomBar(
         canDecide: canDecide,
+        canApproveOrSendBack: canApproveOrSendBack,
         isCreator: isCreator,
         canLogProgress: canLogProgress,
         lead: lead,
@@ -909,8 +910,8 @@ class _ProgressCard extends StatelessWidget {
                       height: 8,
                       margin: const EdgeInsets.only(top: 6, right: 10),
                       decoration: BoxDecoration(
-                        color: u.status.isClosed
-                            ? (u.status == IbProgressStatus.closedWon
+                        color: u.status.isTerminal
+                            ? (u.status == IbProgressStatus.mandateWon
                                 ? AppColors.successGreen
                                 : AppColors.errorRed)
                             : AppColors.navyPrimary,

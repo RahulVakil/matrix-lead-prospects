@@ -88,21 +88,10 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
         clearTimelineMonths: months == null,
       );
 
-  void toggleIdentifiedHow(IbIdentifiedHow h) {
-    final next = [...state.identifiedHow];
-    if (next.contains(h)) {
-      next.remove(h);
-    } else {
-      next.add(h);
-    }
-    state = state.copyWith(identifiedHow: next);
-  }
-
   void setNotes(String v) => state = state.copyWith(notes: v);
   void setConfidential(bool v) => state = state.copyWith(isConfidential: v);
   void setConfidentialReason(String v) =>
       state = state.copyWith(confidentialReason: v);
-  void setDeclaration(bool v) => state = state.copyWith(declarationAccepted: v);
 
   void setIndustry(IbIndustry? v) => state = state.copyWith(
         industry: v,
@@ -161,13 +150,11 @@ class IbLeadFormNotifier extends StateNotifier<IbLeadFormState> {
         dealValueRange: state.dealValueRange ?? IbDealValueRange.upTo10Cr,
         dealStage: state.dealStage,
         timelineMonths: state.timelineMonths,
-        identifiedHow: state.identifiedHow,
         notes: state.notes.trim().isEmpty ? null : state.notes.trim(),
         isConfidential: state.isConfidential,
         confidentialReason: state.confidentialReason.trim().isEmpty
             ? null
             : state.confidentialReason.trim(),
-        declarationAccepted: state.declarationAccepted,
         status: submit ? IbLeadStatus.pending : IbLeadStatus.draft,
         createdById: createdById,
         createdByName: createdByName,

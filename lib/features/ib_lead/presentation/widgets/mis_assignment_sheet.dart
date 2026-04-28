@@ -23,10 +23,10 @@ const _mockIbRms = <IbRmOption>[
 /// CC list defaults per IB deal type. Editable per-lead in the sheet.
 Map<IbDealType, List<String>> _defaultCcByDealType = const {
   IbDealType.ecm: ['ecm-desk@jmfs.in', 'head.ib@jmfs.in'],
-  IbDealType.dcm: ['dcm-desk@jmfs.in', 'head.ib@jmfs.in'],
   IbDealType.ma: ['ma-team@jmfs.in', 'head.ib@jmfs.in', 'legal@jmfs.in'],
   IbDealType.privateEquity: ['pe-coverage@jmfs.in', 'head.ib@jmfs.in'],
   IbDealType.structuredFinance: ['structured@jmfs.in', 'head.ib@jmfs.in'],
+  IbDealType.ipo: ['ipo-desk@jmfs.in', 'head.ib@jmfs.in'],
   IbDealType.other: ['head.ib@jmfs.in'],
 };
 

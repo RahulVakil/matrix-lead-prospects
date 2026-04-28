@@ -2,7 +2,9 @@ import '../enums/ib_deal_type.dart';
 import '../models/ib_lead_model.dart';
 
 /// Global Rule #1: One active IB lead per client at any time.
-/// An IB lead is "active" if its status is NOT Closed Won / Closed Lost.
+/// An IB lead is "active" if its latest progress status is NOT terminal
+/// (Mandate Won / Mandate Lost / Declined) and the workflow status is
+/// not Dropped.
 class DuplicateIbCheck {
   DuplicateIbCheck._();
 
@@ -25,9 +27,7 @@ class DuplicateIbCheck {
 
   static bool _isActive(IbLeadModel ib) {
     final s = ib.latestProgressStatus;
-    if (s == IbProgressStatus.closedWon || s == IbProgressStatus.closedLost) {
-      return false;
-    }
+    if (s != null && s.isTerminal) return false;
     // Also treat the workflow-level "dropped" as inactive.
     if (ib.status == IbLeadStatus.dropped) return false;
     return true;

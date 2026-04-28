@@ -6,7 +6,6 @@ import '../../../../core/enums/user_role.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_loader.dart';
-import '../../../../core/widgets/create_chooser_sheet.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -46,7 +45,7 @@ class LeadsDashboardScreen extends StatelessWidget {
             ),
             floatingActionButton: FloatingActionButton(
               backgroundColor: AppColors.navyPrimary,
-              onPressed: () => showCreateChooser(context),
+              onPressed: () => context.push('/leads/new'),
               child: const Icon(Icons.add, color: Colors.white),
             ),
             body: state.isLoading

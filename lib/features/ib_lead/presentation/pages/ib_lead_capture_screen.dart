@@ -247,22 +247,6 @@ class _CaptureBody extends ConsumerWidget {
           const SizedBox(height: 24),
           const CompassSectionHeader(title: 'Context'),
           const SizedBox(height: 8),
-          Text('How was this identified?', style: AppTextStyles.labelSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: IbIdentifiedHow.values
-                .map(
-                  (h) => CompassFilterChip(
-                    selected: state.identifiedHow.contains(h),
-                    label: h.label,
-                    onTap: () => notifier.toggleIdentifiedHow(h),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
           CompassTextField(
             label: 'Notes',
             hint: 'Brief context, sector, parties involved…',
@@ -270,40 +254,6 @@ class _CaptureBody extends ConsumerWidget {
             maxLines: 4,
             maxLength: 500,
             onChanged: notifier.setNotes,
-          ),
-
-          const SizedBox(height: 24),
-          const CompassSectionHeader(title: 'Declaration'),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () => notifier.setDeclaration(!state.declarationAccepted),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surfacePrimary,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.borderDefault),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: state.declarationAccepted,
-                    activeColor: AppColors.navyPrimary,
-                    onChanged: (v) => notifier.setDeclaration(v ?? false),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'I confirm this lead is based on a genuine conversation '
-                      'and the information provided is accurate to the best of '
-                      'my knowledge.',
-                      style: AppTextStyles.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
 
           if (state.submitError != null) ...[

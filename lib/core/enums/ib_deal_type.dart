@@ -1,10 +1,10 @@
 enum IbDealType {
   ecm('ECM'),
-  dcm('DCM'),
   ma('M&A'),
   privateEquity('Private Equity / Fundraising'),
   structuredFinance('Structured Finance'),
-  other('Other');
+  ipo('IPO'),
+  other('Others');
 
   final String label;
   const IbDealType(this.label);
@@ -101,9 +101,9 @@ enum IbIndustry {
 /// Manual entry remains the source of truth — chips just pre-fill it.
 /// All values are in INR Crore.
 enum IbDealSizeBucket {
-  upTo500('< ₹500 Cr', 0, 500, 250),
+  range300To500('₹300 – 500 Cr', 300, 500, 400),
   range500To1000('₹500 – 1,000 Cr', 500, 1000, 750),
-  above1000('₹1,000 Cr +', 1000, 99999, 1500);
+  above1000('Greater than ₹1,000 Cr', 1000, 99999, 1500);
 
   final String label;
   final double minCr;
@@ -113,34 +113,32 @@ enum IbDealSizeBucket {
   const IbDealSizeBucket(this.label, this.minCr, this.maxCr, this.prefillCr);
 
   static IbDealSizeBucket fromCr(double cr) {
-    if (cr < 500) return upTo500;
+    if (cr < 500) return range300To500;
     if (cr < 1000) return range500To1000;
     return above1000;
   }
 }
 
-/// IB Status Tracking enum — hardcoded per spec. 5 values only.
-/// Reminder cadence: 30 days; escalation at day 32 (30+2).
+/// IB Status Tracking enum. Terminal states (Mandate Won / Lost / Declined)
+/// lock the lead from further updates. Reminder cadence: 30 days;
+/// escalation at day 32 (30+2).
+///
+/// "Declined" is set by the IB team when they accepted and worked on the
+/// lead but for some unforeseen reason cannot pursue it further. It is
+/// distinct from the workflow-level [IbLeadStatus.dropped] which means the
+/// Admin/MIS rejected the lead during initial review.
 enum IbProgressStatus {
   inDiscussion('In Discussion'),
   proposalSent('Proposal Sent'),
   onHold('On Hold'),
-  closedWon('Closed Won'),
-  closedLost('Closed Lost');
+  mandateWon('Mandate Won'),
+  mandateLost('Mandate Lost'),
+  declined('Declined');
 
   final String label;
   const IbProgressStatus(this.label);
 
-  bool get isClosed => this == closedWon || this == closedLost;
+  bool get isTerminal =>
+      this == mandateWon || this == mandateLost || this == declined;
 }
 
-enum IbIdentifiedHow {
-  clientMeeting('Client Meeting'),
-  referral('Referral'),
-  industryEvent('Industry Event'),
-  inboundEnquiry('Inbound Enquiry'),
-  other('Other');
-
-  final String label;
-  const IbIdentifiedHow(this.label);
-}
