@@ -169,7 +169,6 @@ class MockDataGenerators {
           ? now.subtract(Duration(hours: lastContactDaysAgo * 24 + rng.nextInt(24)))
           : null;
 
-      final score = _scoreForLead(source, stage, lastContacted, rng);
       final aum = _aumForIndex(seed, rng);
       final numProducts = rng.nextInt(3) + 1;
       final products = List.generate(numProducts, (j) => _products[(seed + j) % _products.length]).toSet().toList();
@@ -232,7 +231,6 @@ class MockDataGenerators {
         source: source,
         referredBy: source == LeadSource.referral ? '${_firstNames[(seed + 5) % _firstNames.length]} ${_lastNames[(seed + 2) % _lastNames.length]}' : null,
         stage: stage,
-        score: score,
         estimatedAum: aum,
         productInterest: products,
         assignedRmId: rm.id,
@@ -329,7 +327,6 @@ class MockDataGenerators {
         city: _cities[(i * 3) % _cities.length],
         source: source,
         stage: LeadStage.lead,
-        score: source.baseScore + rng.nextInt(20),
         estimatedAum: aum,
         productInterest: [_products[i % _products.length]],
         assignedRmId: 'POOL',
@@ -439,24 +436,6 @@ class MockDataGenerators {
     if (roll < 78) return LeadStage.engage;
     if (roll < 88) return LeadStage.onboard;
     return LeadStage.dropped;
-  }
-
-  static int _scoreForLead(LeadSource source, LeadStage stage, DateTime? lastContacted, Random rng) {
-    var score = source.baseScore;
-    // AUM bonus
-    score += rng.nextInt(30);
-    // Stage bonus
-    if (stage.order >= 3) score += 5;
-    if (stage.order >= 4) score += 5;
-    // Engagement bonus
-    score += rng.nextInt(20);
-    // Recency decay
-    if (lastContacted != null) {
-      final daysSince = DateTime.now().difference(lastContacted).inDays;
-      if (daysSince > 30) score -= 20;
-      else if (daysSince > 15) score -= 10;
-    }
-    return score.clamp(0, 100);
   }
 
   static double? _aumForIndex(int seed, Random rng) {

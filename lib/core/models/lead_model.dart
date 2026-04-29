@@ -45,7 +45,6 @@ class LeadModel {
   final LeadSource source;
   final String? referredBy;
   final LeadStage stage;
-  final int score;
   final double? estimatedAum;
   final List<String> productInterest;
   final String assignedRmId;
@@ -104,7 +103,6 @@ class LeadModel {
     required this.source,
     this.referredBy,
     required this.stage,
-    required this.score,
     this.estimatedAum,
     this.productInterest = const [],
     required this.assignedRmId,
@@ -225,7 +223,6 @@ class LeadModel {
     LeadSource? source,
     String? referredBy,
     LeadStage? stage,
-    int? score,
     double? estimatedAum,
     List<String>? productInterest,
     String? assignedRmId,
@@ -281,7 +278,6 @@ class LeadModel {
       source: source ?? this.source,
       referredBy: referredBy ?? this.referredBy,
       stage: stage ?? this.stage,
-      score: score ?? this.score,
       estimatedAum: estimatedAum ?? this.estimatedAum,
       productInterest: productInterest ?? this.productInterest,
       assignedRmId: assignedRmId ?? this.assignedRmId,

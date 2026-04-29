@@ -1,6 +1,5 @@
 import '../models/client_master_record.dart';
 import '../models/coverage_check_result.dart';
-import '../models/family_group_model.dart';
 
 /// Repository for the Coverage Check workflow that replaces the SharePoint
 /// CRM Search dashboards. Backed by Client Master + Company Master + Lead List
@@ -32,7 +31,4 @@ abstract class CoverageRepository {
 
   /// Free-form group / company search — mirrors the "Group search" view.
   Future<List<ClientMasterRecord>> searchByGroup(String query);
-
-  /// Family-level search — returns the full family group with all members.
-  Future<List<FamilyGroupModel>> searchByFamily(String groupName);
 }

@@ -77,9 +77,6 @@ abstract class LeadRepository {
   /// + deal edits + IB events) for a lead, sorted newest first.
   Future<List<TimelineEntryModel>> getTimeline(String leadId);
 
-  /// Append an arbitrary timeline entry — used by IB lead created, deal edits, etc.
-  Future<void> appendTimelineEntry(TimelineEntryModel entry);
-
   /// Drop a lead. Notes are mandatory; reason is optional (the RM may not
   /// have a clean enum value for the situation). Only RM can drop.
   Future<LeadModel> dropLead(

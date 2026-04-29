@@ -637,13 +637,6 @@ class _SummaryStrip extends StatelessWidget {
           label: 'Last contact',
           value: lead.lastContactDisplay,
         ),
-        _divider(),
-        _summaryCell(
-          icon: Icons.bolt_outlined,
-          label: 'Score',
-          value: '${lead.score}',
-          accent: lead.temperature.color,
-        ),
       ],
     );
   }

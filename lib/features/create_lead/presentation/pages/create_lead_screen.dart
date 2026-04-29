@@ -306,7 +306,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       keyContacts: _entityType.isIndividual ? const [] : _keyContacts,
       source: _source!,
       stage: LeadStage.lead,
-      score: _source!.baseScore,
       assignedRmId: user.id,
       assignedRmName: user.name,
       // Lead inherits the RM's vertical so downstream filters / Get Lead

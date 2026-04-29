@@ -38,7 +38,6 @@ class _DataExportBody extends StatelessWidget {
     buf.writeln();
     buf.writeln('-- Pipeline --');
     buf.writeln('Stage: ${lead.stage.label}');
-    buf.writeln('Score: ${lead.score}');
     buf.writeln('Source: ${lead.source.label}');
     buf.writeln('Owner: ${lead.assignedRmName}');
     buf.writeln('Created: ${lead.createdAt.toIso8601String()}');

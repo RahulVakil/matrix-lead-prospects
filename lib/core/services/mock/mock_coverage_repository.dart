@@ -119,13 +119,4 @@ class MockCoverageRepository implements CoverageRepository {
         .toList();
   }
 
-  @override
-  Future<List<FamilyGroupModel>> searchByFamily(String groupName) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final q = groupName.toLowerCase().trim();
-    if (q.isEmpty) return const [];
-    return _families
-        .where((f) => f.groupName.toLowerCase().contains(q))
-        .toList();
-  }
 }

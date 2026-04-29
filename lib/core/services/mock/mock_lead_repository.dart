@@ -43,7 +43,6 @@ class MockLeadRepository implements LeadRepository {
       phone: '0000000000',
       source: LeadSource.referral,
       stage: LeadStage.lead,
-      score: 40,
       assignedRmId: 'RM001',
       assignedRmName: 'Priya Sharma',
       vertical: 'EWG',
@@ -57,7 +56,6 @@ class MockLeadRepository implements LeadRepository {
       phone: '0000000000',
       source: LeadSource.referral,
       stage: LeadStage.lead,
-      score: 55,
       assignedRmId: 'RM001',
       assignedRmName: 'Priya Sharma',
       vertical: 'PWG',
@@ -72,7 +70,6 @@ class MockLeadRepository implements LeadRepository {
         phone: '0000000000',
         source: LeadSource.referral,
         stage: [LeadStage.lead, LeadStage.profiling, LeadStage.engage][i],
-        score: [45, 62, 78][i],
         assignedRmId: 'TL001',
         assignedRmName: 'Vikram Shah',
         vertical: 'EWG',
@@ -168,7 +165,10 @@ class MockLeadRepository implements LeadRepository {
         filtered.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
       default:
-        filtered.sort((a, b) => b.score.compareTo(a.score));
+        // Score field was retired in the final-base batch — fall back to
+        // alphabetical-by-name so callers without an explicit sortBy land
+        // on a deterministic ordering.
+        filtered.sort((a, b) => a.fullName.compareTo(b.fullName));
     }
 
     final total = filtered.length;
@@ -338,15 +338,6 @@ class MockLeadRepository implements LeadRepository {
     entries.addAll(_extraTimeline[leadId] ?? const []);
     entries.sort((a, b) => b.dateTime.compareTo(a.dateTime));
     return entries;
-  }
-
-  @override
-  Future<void> appendTimelineEntry(TimelineEntryModel entry) async {
-    _extraTimeline.putIfAbsent(entry.leadId, () => []).insert(0, entry);
-    final idx = _leads.indexWhere((l) => l.id == entry.leadId);
-    if (idx >= 0) {
-      _leads[idx] = _leads[idx].copyWith(updatedAt: DateTime.now());
-    }
   }
 
   // ── Drop / Return to Pool ────────────────────────────────────────────
