@@ -7,14 +7,20 @@ import '../models/family_group_model.dart';
 /// data sources internally.
 abstract class CoverageRepository {
   /// Real-time coverage check used inline in Create Lead and IB Lead capture.
-  /// Email is included as a tier-2 match signal on the wealth side; the IB
-  /// caller passes only name + company today and is unaffected.
+  /// Wealth-side de-dupe rules vary by vertical:
+  ///   EWG: match on Full Name OR Email OR Mobile (against Wealth Spectrum
+  ///        client master only).
+  ///   PWG: same as EWG plus Company Name.
+  /// Pass [vertical] = 'EWG' | 'PWG'. The IB caller leaves it null and gets
+  /// the EWG-style behavior, which is unchanged from its prior contract
+  /// (name + company match against the same client master records).
   Future<CoverageCheckResult> checkCoverage({
     String? name,
     String? phone,
     String? email,
     String? company,
     String? groupName,
+    String? vertical,
   });
 
   /// Free-form name search (firstName + optional lastName) — mirrors the

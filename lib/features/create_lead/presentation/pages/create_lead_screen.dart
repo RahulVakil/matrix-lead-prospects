@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/consent_type.dart';
+import '../../../../core/enums/lead_designation.dart';
 import '../../../../core/enums/lead_entity_type.dart';
 import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
@@ -54,6 +55,11 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
   final _entityNameCtrl = TextEditingController(); // non-individual single field
   final _companyNameCtrl = TextEditingController(); // optional, both types
 
+  // Designation (Individual lead only — for Non-Individual the designation
+  // is captured per Key Contact via KeyContactsField's dropdown mode).
+  LeadDesignation? _designation;
+  final _designationOtherCtrl = TextEditingController();
+
   // Contact (both optional)
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -92,6 +98,7 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
     _lastNameCtrl.dispose();
     _entityNameCtrl.dispose();
     _companyNameCtrl.dispose();
+    _designationOtherCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
@@ -142,6 +149,12 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       return;
     }
 
+    // Vertical is derived from the logged-in RM's user profile (no form
+    // selector). EWG uses Name/Email/Mobile match composition; PWG also
+    // includes Company. The mock data restricts matches to Wealth Spectrum
+    // (CoverageSource.clientMaster) regardless of vertical.
+    final user = context.read<AuthCubit>().state.currentUser;
+
     setState(() => _checkingCoverage = true);
     final result = await getIt<CoverageRepository>().checkCoverage(
       name: name.isEmpty ? null : name,
@@ -149,6 +162,7 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       email: email.contains('@') ? email : null,
       company: company.isEmpty ? null : company,
       groupName: company.isEmpty ? null : company,
+      vertical: user?.vertical,
     );
     if (!mounted) return;
     setState(() {
@@ -192,6 +206,12 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
     if (_isDuplicate) return false;
     if (_entityType == LeadEntityType.others &&
         _entityTypeOtherCtrl.text.trim().isEmpty) {
+      return false;
+    }
+    // Designation qualifier required when Individual + designation == Others.
+    if (_entityType.isIndividual &&
+        _designation == LeadDesignation.others &&
+        _designationOtherCtrl.text.trim().isEmpty) {
       return false;
     }
     if (!_entityType.isIndividual) {
@@ -245,6 +265,13 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       lastName: _entityType.isIndividual
           ? _lastNameCtrl.text.trim()
           : null,
+      // Designation only applies when Individual; Non-Individual leads carry
+      // designation per Key Contact (KeyContactsField with dropdown mode).
+      designation: _entityType.isIndividual ? _designation : null,
+      designationOther: (_entityType.isIndividual &&
+              _designation == LeadDesignation.others)
+          ? _designationOtherCtrl.text.trim()
+          : null,
       phone: phone.isEmpty ? null : phone,
       email: email.isEmpty ? null : email,
       // Company Name maps to both `companyName` (display) and `groupName`
@@ -258,6 +285,9 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       score: _source!.baseScore,
       assignedRmId: user.id,
       assignedRmName: user.name,
+      // Lead inherits the RM's vertical so downstream filters / Get Lead
+      // pool segmentation work correctly.
+      vertical: user.vertical ?? 'EWG',
       createdAt: now,
       updatedAt: now,
       consentStatus: ConsentStatus.granted,
@@ -388,6 +418,33 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
+              const SizedBox(height: 12),
+              // Designation — Individual leads only. For Non-Individual the
+              // designation lives on each Key Contact (see KeyContactsField
+              // call site below with useDesignationDropdown: true).
+              CompassDropdown<LeadDesignation>(
+                label: 'Designation',
+                value: _designation,
+                hint: 'Select designation',
+                items: LeadDesignation.values
+                    .map((d) =>
+                        CompassDropdownItem(value: d, label: d.label))
+                    .toList(),
+                onChanged: (v) => setState(() => _designation = v),
+              ),
+              if (_designation == LeadDesignation.others) ...[
+                const SizedBox(height: 12),
+                CompassTextField(
+                  controller: _designationOtherCtrl,
+                  label: 'Specify designation',
+                  isRequired: true,
+                  hint: 'e.g. Trustee, Authorised Signatory',
+                  maxLength: 60,
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Required when Others is selected'
+                      : null,
+                ),
+              ],
             ] else ...[
               CompassTextField(
                 controller: _entityNameCtrl,
@@ -446,6 +503,10 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
               KeyContactsField(
                 contacts: _keyContacts,
                 onChanged: (next) => setState(() => _keyContacts = next),
+                // Wealth side gets the Designation dropdown (Promoter /
+                // Founder / CEO / Family Office Head / Others). IB capture
+                // leaves this default false and keeps free-text designation.
+                useDesignationDropdown: true,
               ),
             ],
 

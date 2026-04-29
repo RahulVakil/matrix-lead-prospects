@@ -6,15 +6,15 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../cubit/shell_cubit.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../../../clients/presentation/pages/client_list_screen.dart';
-import '../../../dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
+import '../../../dashboard_leadership/presentation/pages/leadership_dashboard_screen.dart';
 import '../../../ib_lead/presentation/pages/ib_dashboard_screen.dart';
 import '../../../leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
 import 'more_screen.dart';
 
 /// AppShell: bottom nav. Tab 0 varies by role:
-/// RM → Leads Dashboard
-/// TL → Team Dashboard
-/// Checker/Admin → More (grid menu)
+/// RM → Leads Dashboard (personal pipeline)
+/// TL / Regional / Zonal / CEO / Admin → Leadership Dashboard (shared
+///   layout, scope filtered by the user's role + team/region/zone)
 /// IB → IB Dashboard
 class AppShell extends StatelessWidget {
   const AppShell({super.key});
@@ -57,8 +57,15 @@ class AppShell extends StatelessWidget {
           MoreScreen(),
         ];
       case UserRole.teamLead:
+      case UserRole.regional:
+      case UserRole.zonal:
+      case UserRole.ceo:
+      case UserRole.admin:
+        // The shared Leadership dashboard derives its scope from the
+        // logged-in user's role (TL→team, Regional→region, Zonal→zone,
+        // CEO/Admin→all). Layout is identical at every level.
         return const [
-          TlDashboardScreen(),
+          LeadershipDashboardScreen(),
           ClientListScreen(showAll: true),
           _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
           MoreScreen(),
@@ -67,13 +74,6 @@ class AppShell extends StatelessWidget {
         return const [
           IbDashboardScreen(),
           _PlaceholderTab(title: 'Clients', icon: Icons.people_outline),
-          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-          MoreScreen(),
-        ];
-      case UserRole.admin:
-        return const [
-          LeadsDashboardScreen(),
-          ClientListScreen(),
           _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
           MoreScreen(),
         ];

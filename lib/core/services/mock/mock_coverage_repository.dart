@@ -33,69 +33,59 @@ class MockCoverageRepository implements CoverageRepository {
     String? email,
     String? company,
     String? groupName,
+    String? vertical,
   }) async {
     await Future.delayed(const Duration(milliseconds: 600));
 
-    // Phone match → strongest signal
-    if (phone != null && phone.isNotEmpty) {
-      final normPhone = phone.replaceAll(RegExp(r'\s+'), '');
-      final match = _records.where((r) {
-        final rp = r.phone?.replaceAll(RegExp(r'\s+'), '') ?? '';
-        return rp.isNotEmpty && (rp.endsWith(normPhone) || normPhone.endsWith(rp));
-      }).toList();
-      if (match.isNotEmpty) {
-        final hit = match.first;
-        final family = _findFamily(hit);
-        return hit.source == CoverageSource.clientMaster
-            ? CoverageCheckResult.existingClient(hit, familyMatch: family)
-            : CoverageCheckResult.duplicateLead(hit, familyMatch: family);
-      }
-    }
+    // Per-spec: only consider Wealth Spectrum client list (clientMaster).
+    // Earlier versions also surfaced duplicateLead from leadList — that path
+    // is intentionally retired so Add Lead doesn't block on internal lead
+    // overlaps; only existing-client conflicts are flagged now.
+    final pool = _records
+        .where((r) => r.source == CoverageSource.clientMaster)
+        .toList();
 
-    // Email match → tier-2 signal (added when wealth Add Lead made phone
-    // optional; treat as a strong match if the email matches an existing
-    // client / lead exactly).
-    if (email != null && email.isNotEmpty) {
-      final normEmail = email.toLowerCase().trim();
-      final match = _records.where((r) {
-        final re = (r.email ?? '').toLowerCase().trim();
-        return re.isNotEmpty && re == normEmail;
-      }).toList();
-      if (match.isNotEmpty) {
-        final hit = match.first;
-        final family = _findFamily(hit);
-        return hit.source == CoverageSource.clientMaster
-            ? CoverageCheckResult.existingClient(hit, familyMatch: family)
-            : CoverageCheckResult.duplicateLead(hit, familyMatch: family);
-      }
-    }
+    // PWG considers Company in addition to Name/Email/Mobile.
+    // EWG (and the IB caller, which leaves vertical null) considers
+    // Name + Email + Mobile only. ANY single field match is enough to flag.
+    final isPwg = (vertical ?? '').toUpperCase() == 'PWG';
 
-    // Name match
-    if (name != null && name.isNotEmpty) {
-      final q = name.toLowerCase();
-      final matches = _records
-          .where((r) => r.clientName.toLowerCase().contains(q))
-          .toList();
-      if (matches.length == 1) {
-        final hit = matches.first;
-        final family = _findFamily(hit);
-        return hit.source == CoverageSource.clientMaster
-            ? CoverageCheckResult.existingClient(hit, confidence: 0.7, familyMatch: family)
-            : CoverageCheckResult.duplicateLead(hit, confidence: 0.6, familyMatch: family);
-      }
-      if (matches.length > 1) {
-        return CoverageCheckResult.requiresReview(matches.take(5).toList());
-      }
-    }
+    final normPhone = (phone ?? '').replaceAll(RegExp(r'\s+'), '');
+    final normEmail = (email ?? '').toLowerCase().trim();
+    final normName = (name ?? '').toLowerCase().trim();
+    final normCompany = (company ?? '').toLowerCase().trim();
 
-    // Group / company match
-    if (company != null && company.isNotEmpty) {
-      final q = company.toLowerCase();
-      final matches = _records
-          .where((r) => (r.groupName ?? '').toLowerCase().contains(q))
-          .toList();
-      if (matches.isNotEmpty) {
-        return CoverageCheckResult.requiresReview(matches.take(5).toList());
+    for (final rec in pool) {
+      // Phone
+      if (normPhone.isNotEmpty) {
+        final rp = rec.phone?.replaceAll(RegExp(r'\s+'), '') ?? '';
+        if (rp.isNotEmpty &&
+            (rp.endsWith(normPhone) || normPhone.endsWith(rp))) {
+          return CoverageCheckResult.existingClient(rec,
+              familyMatch: _findFamily(rec));
+        }
+      }
+      // Email
+      if (normEmail.isNotEmpty) {
+        final re = (rec.email ?? '').toLowerCase().trim();
+        if (re.isNotEmpty && re == normEmail) {
+          return CoverageCheckResult.existingClient(rec,
+              familyMatch: _findFamily(rec));
+        }
+      }
+      // Name (substring is enough — coverage UI shows the matched record)
+      if (normName.isNotEmpty &&
+          rec.clientName.toLowerCase().contains(normName)) {
+        return CoverageCheckResult.existingClient(rec,
+            confidence: 0.7, familyMatch: _findFamily(rec));
+      }
+      // Company — PWG only
+      if (isPwg && normCompany.isNotEmpty) {
+        final rg = (rec.groupName ?? '').toLowerCase();
+        if (rg.isNotEmpty && rg.contains(normCompany)) {
+          return CoverageCheckResult.existingClient(rec,
+              confidence: 0.7, familyMatch: _findFamily(rec));
+        }
       }
     }
 

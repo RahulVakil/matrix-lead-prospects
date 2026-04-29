@@ -11,7 +11,7 @@ import '../features/profiling/presentation/pages/checker_queue_screen.dart';
 import '../features/admin/presentation/pages/manage_pool_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
 import '../features/coverage/presentation/pages/coverage_check_screen.dart';
-import '../features/dashboard_tl/presentation/pages/tl_dashboard_screen.dart';
+import '../features/dashboard_leadership/presentation/pages/leadership_dashboard_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_capture_screen.dart';
 import '../features/ib_lead/presentation/pages/ib_lead_detail_screen.dart';
 import '../features/ib_lead/presentation/pages/my_ib_leads_screen.dart';
@@ -98,10 +98,12 @@ GoRouter createRouter(AuthCubit authCubit) {
         pageBuilder: (context, state) => _fadePage(const ManagePoolScreen()),
       ),
 
-      // TL routes
+      // Leadership dashboard — shared by TL / Regional / Zonal / CEO / Admin.
+      // Scope is derived from the logged-in user's role + region/team/zone.
       GoRoute(
         path: '/tl/dashboard',
-        pageBuilder: (context, state) => _fadePage(const TlDashboardScreen()),
+        pageBuilder: (context, state) =>
+            _fadePage(const LeadershipDashboardScreen()),
       ),
       // Phase 1 — Coverage, Clients, Notifications, IB Lead
       GoRoute(

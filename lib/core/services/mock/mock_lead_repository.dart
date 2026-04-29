@@ -93,6 +93,9 @@ class MockLeadRepository implements LeadRepository {
     String? sortBy,
     bool ascending = false,
     String? assignedRmId,
+    String? assignedTeamId,
+    String? region,
+    String? zone,
   }) async {
     await Future.delayed(const Duration(milliseconds: 300));
 
@@ -100,6 +103,28 @@ class MockLeadRepository implements LeadRepository {
 
     if (assignedRmId != null) {
       filtered = filtered.where((l) => l.assignedRmId == assignedRmId).toList();
+    }
+    // Hierarchical scope filters — derive team/region/zone from the lead's
+    // assigned RM by looking up the user in the mock user list. Each filter
+    // is applied independently so callers can layer them if needed (the
+    // cubit normally passes only one).
+    if (assignedTeamId != null) {
+      filtered = filtered.where((l) {
+        final u = MockDataGenerators.findUserById(l.assignedRmId);
+        return u?.teamId == assignedTeamId;
+      }).toList();
+    }
+    if (region != null) {
+      filtered = filtered.where((l) {
+        final u = MockDataGenerators.findUserById(l.assignedRmId);
+        return u?.regionName == region;
+      }).toList();
+    }
+    if (zone != null) {
+      filtered = filtered.where((l) {
+        final u = MockDataGenerators.findUserById(l.assignedRmId);
+        return u?.zoneName == zone;
+      }).toList();
     }
     if (stage != null) {
       filtered = filtered.where((l) => l.stage == stage).toList();

@@ -9,9 +9,16 @@ class UserModel {
   final String? teamId;
   final String? teamName;
   final String? regionName;
+  /// Optional zone (parent of region) — used for the Zonal Head's dashboard
+  /// scope and for filtering leads up the hierarchy.
+  final String? zoneName;
   final String? designation;
   final String? email;
   final String? phone;
+  /// Wealth vertical for RMs (and downstream leads they create). 'EWG' or
+  /// 'PWG'; null for non-RM roles. Drives the per-vertical de-dupe rules
+  /// in CoverageRepository.checkCoverage().
+  final String? vertical;
 
   UserModel({
     required this.id,
@@ -22,9 +29,11 @@ class UserModel {
     this.teamId,
     this.teamName,
     this.regionName,
+    this.zoneName,
     this.designation,
     this.email,
     this.phone,
+    this.vertical,
   });
 
   String get initials {

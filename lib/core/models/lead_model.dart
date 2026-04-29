@@ -1,4 +1,5 @@
 import '../enums/consent_type.dart';
+import '../enums/lead_designation.dart';
 import '../enums/lead_entity_type.dart';
 import '../enums/lead_stage.dart';
 import '../enums/lead_temperature.dart';
@@ -22,6 +23,11 @@ class LeadModel {
   final String? firstName;
   final String? middleName;
   final String? lastName;
+  /// Designation for INDIVIDUAL leads only. For non-individual leads the
+  /// designation is captured per Key Contact instead (see [keyContacts]).
+  final LeadDesignation? designation;
+  /// Free-text qualifier when [designation] is `LeadDesignation.others`.
+  final String? designationOther;
   /// Optional — both phone and email are user-optional on the wealth Add Lead
   /// form. Display sites must handle null with `??`. Action launchers
   /// (Call / WhatsApp / SMS) gate themselves on a non-empty phone.
@@ -84,6 +90,8 @@ class LeadModel {
     this.firstName,
     this.middleName,
     this.lastName,
+    this.designation,
+    this.designationOther,
     this.phone,
     this.email,
     this.companyName,
@@ -198,6 +206,8 @@ class LeadModel {
     String? firstName,
     String? middleName,
     String? lastName,
+    LeadDesignation? designation,
+    String? designationOther,
     String? phone,
     String? email,
     String? companyName,
@@ -252,6 +262,8 @@ class LeadModel {
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,
+      designation: designation ?? this.designation,
+      designationOther: designationOther ?? this.designationOther,
       phone: phone ?? this.phone,
       email: email ?? this.email,
       companyName: companyName ?? this.companyName,

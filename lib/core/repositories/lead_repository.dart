@@ -11,6 +11,10 @@ import '../enums/update_type.dart';
 import '../../features/get_lead/get_lead_dashboard_data.dart';
 
 abstract class LeadRepository {
+  /// Lead listing. Scope filters [assignedRmId] / [assignedTeamId] /
+  /// [region] / [zone] are mutually layered: the repo derives team/region/
+  /// zone from the assigned RM's user record (mock-friendly). Pass at most
+  /// one — the cubit picks the right one based on `DashboardScope`.
   Future<PaginatedResult<LeadModel>> getLeads({
     int page = 1,
     int pageSize = 20,
@@ -21,6 +25,9 @@ abstract class LeadRepository {
     String? sortBy,
     bool ascending = false,
     String? assignedRmId,
+    String? assignedTeamId,
+    String? region,
+    String? zone,
   });
 
   Future<LeadModel> getLeadById(String id);

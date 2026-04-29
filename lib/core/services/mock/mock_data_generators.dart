@@ -58,17 +58,23 @@ class MockDataGenerators {
 
   static final _contactTimes = ['Morning', 'Afternoon', 'Evening', 'Any'];
 
+  // Org hierarchy used by the Leadership dashboard:
+  //   Zone "Zone West"  → Region West  → Teams T001 (West Alpha), T002 (West Beta)
+  //   Zone "Zone North" → Region North → Team T003 (North Alpha)
+  //   Zone "Zone South" → Region South → Teams T004 (South Alpha), T005 (South Beta)
+  // Vertical (EWG / PWG) is alternated across the 10 RMs so both rule
+  // branches get exercised in coverage de-dupe.
   static final _rmNames = [
-    UserModel(id: 'RM001', name: 'Priya Sharma', empCode: 'EMP001', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'Sr. RM'),
-    UserModel(id: 'RM002', name: 'Amit Verma', empCode: 'EMP002', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'RM'),
-    UserModel(id: 'RM003', name: 'Deepa Nair', empCode: 'EMP003', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', designation: 'RM'),
-    UserModel(id: 'RM004', name: 'Karan Kapoor', empCode: 'EMP004', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'Sr. RM'),
-    UserModel(id: 'RM005', name: 'Neha Singh', empCode: 'EMP005', role: UserRole.rm, branchName: 'Bangalore', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', designation: 'RM'),
-    UserModel(id: 'RM006', name: 'Arjun Bhatia', empCode: 'EMP006', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'RM'),
-    UserModel(id: 'RM007', name: 'Priya Menon', empCode: 'EMP007', role: UserRole.rm, branchName: 'Chennai', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', designation: 'Sr. RM'),
-    UserModel(id: 'RM008', name: 'Neha Kulkarni', empCode: 'EMP008', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', designation: 'RM'),
-    UserModel(id: 'RM009', name: 'Rohit Agarwal', empCode: 'EMP009', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'RM'),
-    UserModel(id: 'RM010', name: 'Tanvi Bhargava', empCode: 'EMP010', role: UserRole.rm, branchName: 'Hyderabad', teamId: 'T005', teamName: 'South Beta', regionName: 'South', designation: 'RM'),
+    UserModel(id: 'RM001', name: 'Priya Sharma', empCode: 'EMP001', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', zoneName: 'Zone West', designation: 'Sr. RM', vertical: 'EWG'),
+    UserModel(id: 'RM002', name: 'Amit Verma', empCode: 'EMP002', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', zoneName: 'Zone West', designation: 'RM', vertical: 'PWG'),
+    UserModel(id: 'RM003', name: 'Deepa Nair', empCode: 'EMP003', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', zoneName: 'Zone West', designation: 'RM', vertical: 'EWG'),
+    UserModel(id: 'RM004', name: 'Karan Kapoor', empCode: 'EMP004', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', zoneName: 'Zone North', designation: 'Sr. RM', vertical: 'PWG'),
+    UserModel(id: 'RM005', name: 'Neha Singh', empCode: 'EMP005', role: UserRole.rm, branchName: 'Bangalore', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', zoneName: 'Zone South', designation: 'RM', vertical: 'EWG'),
+    UserModel(id: 'RM006', name: 'Arjun Bhatia', empCode: 'EMP006', role: UserRole.rm, branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', zoneName: 'Zone West', designation: 'RM', vertical: 'PWG'),
+    UserModel(id: 'RM007', name: 'Priya Menon', empCode: 'EMP007', role: UserRole.rm, branchName: 'Chennai', teamId: 'T004', teamName: 'South Alpha', regionName: 'South', zoneName: 'Zone South', designation: 'Sr. RM', vertical: 'EWG'),
+    UserModel(id: 'RM008', name: 'Neha Kulkarni', empCode: 'EMP008', role: UserRole.rm, branchName: 'Pune', teamId: 'T002', teamName: 'West Beta', regionName: 'West', zoneName: 'Zone West', designation: 'RM', vertical: 'PWG'),
+    UserModel(id: 'RM009', name: 'Rohit Agarwal', empCode: 'EMP009', role: UserRole.rm, branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', zoneName: 'Zone North', designation: 'RM', vertical: 'EWG'),
+    UserModel(id: 'RM010', name: 'Tanvi Bhargava', empCode: 'EMP010', role: UserRole.rm, branchName: 'Hyderabad', teamId: 'T005', teamName: 'South Beta', regionName: 'South', zoneName: 'Zone South', designation: 'RM', vertical: 'PWG'),
   ];
 
   static UserModel get defaultRm => _rmNames[0];
@@ -77,12 +83,28 @@ class MockDataGenerators {
 
   static UserModel get teamLead => UserModel(
     id: 'TL001', name: 'Vikram Shah', empCode: 'TL001', role: UserRole.teamLead,
-    branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', designation: 'Team Lead',
+    branchName: 'Mumbai HQ', teamId: 'T001', teamName: 'West Alpha', regionName: 'West', zoneName: 'Zone West', designation: 'Team Lead',
   );
 
   static UserModel get teamLead2 => UserModel(
     id: 'TL002', name: 'Kavita Deshmukh', empCode: 'TL002', role: UserRole.teamLead,
-    branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', designation: 'Team Lead',
+    branchName: 'Delhi', teamId: 'T003', teamName: 'North Alpha', regionName: 'North', zoneName: 'Zone North', designation: 'Team Lead',
+  );
+
+  // Regional / Zonal / CEO seed users for the leadership dashboard hierarchy.
+  static UserModel get regionalHead => UserModel(
+    id: 'RG001', name: 'Aanya Saxena', empCode: 'RG001', role: UserRole.regional,
+    branchName: 'Mumbai HQ', regionName: 'West', zoneName: 'Zone West', designation: 'Regional Head — West',
+  );
+
+  static UserModel get zonalHead => UserModel(
+    id: 'ZN001', name: 'Karthik Iyer', empCode: 'ZN001', role: UserRole.zonal,
+    branchName: 'Mumbai HQ', zoneName: 'Zone West', designation: 'Zonal Head — West',
+  );
+
+  static UserModel get ceoUser => UserModel(
+    id: 'CEO001', name: 'Vivek Khanna', empCode: 'CEO001', role: UserRole.ceo,
+    branchName: 'Mumbai HQ', designation: 'CEO',
   );
 
   static UserModel get admin => UserModel(
@@ -104,6 +126,24 @@ class MockDataGenerators {
     id: 'IB002', name: 'Riya Tandon', empCode: 'IB002', role: UserRole.ib,
     branchName: 'Mumbai HQ', designation: 'IB VP',
   );
+
+  /// Lookup helper used by the lead repo to derive a lead's team / region /
+  /// zone from its assigned RM. Searches RMs + leadership users.
+  static UserModel? findUserById(String id) {
+    for (final u in _rmNames) {
+      if (u.id == id) return u;
+    }
+    if (teamLead.id == id) return teamLead;
+    if (teamLead2.id == id) return teamLead2;
+    if (regionalHead.id == id) return regionalHead;
+    if (zonalHead.id == id) return zonalHead;
+    if (ceoUser.id == id) return ceoUser;
+    if (admin.id == id) return admin;
+    if (admin2.id == id) return admin2;
+    if (ibUser.id == id) return ibUser;
+    if (ibUser2.id == id) return ibUser2;
+    return null;
+  }
 
   static List<LeadModel> generateLeads(int count, {String? rmId}) {
     final rng = Random(42); // deterministic seed
@@ -251,6 +291,10 @@ class MockDataGenerators {
         rmName: rm.name,
         rmId: rm.id,
         phone: '+91 ${9000000000 + i * 13571}',
+        // Email is needed by the EWG dedupe rule (Full Name OR Email OR Mobile).
+        // Format: firstname.lastname@wealthspectrum.in — deterministic and
+        // typeable for verification.
+        email: '${firstName.toLowerCase()}.${lastName.toLowerCase()}@wealthspectrum.in',
         city: _cities[i % _cities.length],
         source: src,
         lastUpdated: now.subtract(Duration(days: rng.nextInt(180))),
