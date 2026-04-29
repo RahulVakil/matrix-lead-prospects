@@ -138,12 +138,17 @@ class LeadModel {
     this.groupName,
   });
 
-  /// Wealth lead temperature is purely age-based:
-  ///   <30 days from createdAt  → Hot
+  /// Unified Lead Status — the user-facing 4-state classification:
+  ///   stage == onboard          → Onboarded   (terminal — overrides age)
+  ///   stage == dormant          → Dormant     (overrides age, internal)
+  ///   <30 days from createdAt   → Hot
   ///   30-90 days                → Warm
   ///   >90 days                  → Cold
-  /// Dormant stage overrides the age rule.
+  /// (The enum is still named `LeadTemperature` for code-churn reasons —
+  /// renaming the symbol app-wide would be a large no-op refactor — but the
+  /// concept is "Status" in every UI surface.)
   LeadTemperature get temperature {
+    if (stage == LeadStage.onboard) return LeadTemperature.onboarded;
     if (stage == LeadStage.dormant) return LeadTemperature.dormant;
     final ageDays = DateTime.now().difference(createdAt).inDays;
     if (ageDays < 30) return LeadTemperature.hot;

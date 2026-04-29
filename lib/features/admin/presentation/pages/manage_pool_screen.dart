@@ -5,8 +5,11 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/models/admin_action_record.dart';
 import '../../../../core/models/lead_model.dart';
+import '../../../../core/enums/lead_source.dart';
+import '../../../../core/models/lead_request.dart';
 import '../../../../core/models/reassignment_request.dart';
 import '../../../../core/repositories/lead_repository.dart';
+import '../../../../core/repositories/lead_request_repository.dart';
 import '../../../../core/repositories/reassignment_repository.dart';
 import '../../../../core/services/mock/mock_data_generators.dart';
 import '../../../../core/services/mock_notification_queue.dart';
@@ -36,18 +39,20 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
   late TabController _tabCtrl;
   final _repo = getIt<LeadRepository>();
   final _reassignRepo = getIt<ReassignmentRepository>();
+  final _requestRepo = getIt<LeadRequestRepository>();
   bool _loading = true;
   List<LeadModel> _droppedLeads = [];
   List<LeadModel> _poolLeads = [];
   List<ReassignmentRequest> _reassignments = [];
+  List<LeadRequest> _pendingRequests = [];
   int _poolCount = 0;
   Map<String, int> _breakdown = {};
 
   @override
   void initState() {
     super.initState();
-    // 5 tabs: Pool, Requests, Reassignment, Mapped, Dropped.
-    _tabCtrl = TabController(length: 5, vsync: this);
+    // 6 tabs: Pool, Requests, Reassignment, Mapped, Dropped, Upload.
+    _tabCtrl = TabController(length: 6, vsync: this);
     _load();
   }
 
@@ -64,6 +69,7 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
     _poolCount = _poolLeads.length;
     _breakdown = await _repo.getPoolBreakdown();
     _reassignments = await _reassignRepo.getAllPending();
+    _pendingRequests = await _requestRepo.getAllPending();
     if (mounted) setState(() => _loading = false);
   }
 
@@ -182,6 +188,87 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
     }
   }
 
+  /// Fulfill a pending Get-Lead request. Opens the leads-picker sheet
+  /// scoped to the requesting RM, transfers the selected leads, marks the
+  /// LeadRequest fulfilled, and notifies both RM and TL with the assigned
+  /// leads + the fulfillment date.
+  Future<void> _fulfillRequest(LeadRequest req) async {
+    final admin = context.read<AuthCubit>().state.currentUser;
+    if (admin == null) return;
+    // Look up the RM's vertical so the picker can pre-filter.
+    final rmUser = MockDataGenerators.findUserById(req.rmId);
+    final rmVertical = rmUser?.vertical;
+    final assignedIds = <String>[];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _RequestsLeadsPickerSheet(
+        rmName: req.rmName,
+        rmVertical: rmVertical,
+        poolLeads: _poolLeads,
+        onConfirm: (leadIds) async {
+          for (final id in leadIds) {
+            try {
+              await _repo.claimFromPool(id, req.rmId, req.rmName);
+              assignedIds.add(id);
+            } catch (_) {}
+          }
+        },
+      ),
+    );
+    if (assignedIds.isEmpty) return;
+    // Mark the request fulfilled.
+    await _requestRepo.markFulfilled(
+      req.id,
+      adminId: admin.id,
+      adminName: admin.name,
+      assignedLeadIds: assignedIds,
+    );
+    // Notify the RM with the assigned-leads list + date.
+    final dateStr = DateTime.now().toString().split(' ')[0];
+    final idsStr = assignedIds.join(', ');
+    MockNotificationQueue.pushInApp(
+      recipientId: req.rmId,
+      recipientName: req.rmName,
+      title: 'Leads assigned',
+      body:
+          '${assignedIds.length} leads mapped to you on $dateStr. IDs: $idsStr',
+      deepLink: '/get-lead',
+    );
+    MockNotificationQueue.pushEmail(
+      to: '${req.rmName.toLowerCase().replaceAll(' ', '.')}@jmfs.in',
+      subject: 'Leads assigned (${assignedIds.length})',
+      body:
+          '${assignedIds.length} leads have been mapped to you on $dateStr.\nLead IDs: $idsStr\n\nYou can view them on your Leads dashboard.',
+    );
+    // Notify the TL too, if there is one.
+    if (req.teamLeadId != null && req.teamLeadName != null) {
+      MockNotificationQueue.pushInApp(
+        recipientId: req.teamLeadId!,
+        recipientName: req.teamLeadName!,
+        title: 'Team request fulfilled',
+        body:
+            '${req.rmName}\'s request fulfilled — ${assignedIds.length} leads assigned on $dateStr.',
+        deepLink: '/get-lead',
+      );
+      MockNotificationQueue.pushEmail(
+        to: '${req.teamLeadName!.toLowerCase().replaceAll(' ', '.')}@jmfs.in',
+        subject:
+            'Team request fulfilled — ${req.rmName} (${assignedIds.length} leads)',
+        body:
+            '${req.rmName}\'s pool-leads request has been fulfilled by ${admin.name}. ${assignedIds.length} leads were assigned on $dateStr.',
+      );
+    }
+    if (mounted) {
+      showCompassSnack(context,
+          message:
+              'Request fulfilled · ${assignedIds.length} leads assigned to ${req.rmName}',
+          type: CompassSnackType.success);
+      _load();
+    }
+  }
+
   /// Bulk-assign N pool leads to a single RM. Used by both the multi-select
   /// picker and the CSV bulk upload flows.
   Future<void> _bulkAssign(
@@ -264,10 +351,11 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                     ),
                     tabs: [
                       Tab(text: 'POOL (${_poolLeads.length})'),
-                      const Tab(text: 'REQUESTS'),
+                      Tab(text: 'REQUESTS (${_pendingRequests.length})'),
                       Tab(text: 'REASSIGN (${_reassignments.length})'),
                       const Tab(text: 'MAPPED'),
                       Tab(text: 'DROPPED (${_droppedLeads.length})'),
+                      const Tab(text: 'UPLOAD'),
                     ],
                   ),
                 ),
@@ -277,8 +365,9 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                     children: [
                       _AssignTab(poolLeads: _poolLeads, onAssign: _assignLead),
                       _LeadRequestsTab(
+                        requests: _pendingRequests,
                         poolLeads: _poolLeads,
-                        onBulkAssign: _bulkAssign,
+                        onFulfill: _fulfillRequest,
                       ),
                       _ReassignmentTab(
                         requests: _reassignments,
@@ -295,6 +384,7 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                         }
                       }),
                       _DroppedTab(leads: _droppedLeads),
+                      _UploadPoolTab(onUploaded: _load),
                     ],
                   ),
                 ),
@@ -650,31 +740,32 @@ class _DroppedTab extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Tab: Lead Requests — Admin clicks an RM to open a multi-select pool
-// leads picker (with optional CSV bulk upload) for batch assignment.
+// Tab: Lead Requests — driven by real pending LeadRequest records.
+// Admin taps an RM card to open the leads-picker sheet; on confirm the
+// request is marked fulfilled and notifications fire to RM + TL.
 // ────────────────────────────────────────────────────────────────────
 
 class _LeadRequestsTab extends StatelessWidget {
+  final List<LeadRequest> requests;
   final List<LeadModel> poolLeads;
-  /// Called with (leadIds, rmId, rmName) once the admin confirms.
-  final Future<void> Function(List<String>, String, String) onBulkAssign;
+  final Future<void> Function(LeadRequest) onFulfill;
 
   const _LeadRequestsTab({
+    required this.requests,
     required this.poolLeads,
-    required this.onBulkAssign,
+    required this.onFulfill,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Demo: 3 RMs with outstanding pool requests. In production this
-    // would come from a `RequestsRepository`.
-    final rms = MockDataGenerators.allRMs;
-    final requests = [
-      _RequestRow(rms[0], 2),
-      _RequestRow(rms[3], 5),
-      _RequestRow(rms[7], 3),
-    ];
-
+    if (requests.isEmpty) {
+      return const CompassEmptyState(
+        icon: Icons.inbox_outlined,
+        title: 'No outstanding lead requests',
+        subtitle:
+            'When RMs submit requests on the Get Lead screen, they appear here.',
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -682,97 +773,82 @@ class _LeadRequestsTab extends StatelessWidget {
             style: AppTextStyles.labelSmall.copyWith(
                 color: AppColors.textSecondary, letterSpacing: 1)),
         const SizedBox(height: 12),
-        ...requests.map((r) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Material(
-                color: AppColors.surfacePrimary,
+        ...requests.map((r) {
+          final rm = MockDataGenerators.findUserById(r.rmId);
+          final daysAgo = DateTime.now().difference(r.createdAt).inDays;
+          final agoStr = daysAgo <= 0
+              ? '${DateTime.now().difference(r.createdAt).inHours}h ago'
+              : '${daysAgo}d ago';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: AppColors.surfacePrimary,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _openPicker(context, r),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.borderDefault.withValues(alpha: 0.5)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundColor: AppColors.avatarBackground,
-                              child: Text(
-                                r.rm.name
-                                    .split(' ')
-                                    .map((w) => w.isEmpty ? '' : w[0])
-                                    .take(2)
-                                    .join(),
-                                style: AppTextStyles.caption.copyWith(
-                                    color: AppColors.navyDark,
-                                    fontWeight: FontWeight.w600),
-                              ),
+                onTap: () => onFulfill(r),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppColors.borderDefault.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.avatarBackground,
+                            child: Text(
+                              r.rmName
+                                  .split(' ')
+                                  .map((w) => w.isEmpty ? '' : w[0])
+                                  .take(2)
+                                  .join(),
+                              style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.navyDark,
+                                  fontWeight: FontWeight.w600),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(r.rm.name,
-                                      style: AppTextStyles.labelLarge.copyWith(
-                                          fontWeight: FontWeight.w700)),
-                                  Text(
-                                    '${r.rm.teamName ?? "—"} · ${r.rm.vertical ?? "—"}',
-                                    style: AppTextStyles.caption
-                                        .copyWith(color: AppColors.textHint),
-                                  ),
-                                ],
-                              ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(r.rmName,
+                                    style: AppTextStyles.labelLarge.copyWith(
+                                        fontWeight: FontWeight.w700)),
+                                Text(
+                                  '${rm?.teamName ?? "—"} · ${rm?.vertical ?? "—"} · raised $agoStr',
+                                  style: AppTextStyles.caption
+                                      .copyWith(color: AppColors.textHint),
+                                ),
+                              ],
                             ),
-                            const Icon(Icons.chevron_right,
-                                size: 18, color: AppColors.textHint),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${r.requested} leads requested',
-                          style: AppTextStyles.bodySmall
-                              .copyWith(color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
+                          ),
+                          const Icon(Icons.chevron_right,
+                              size: 18, color: AppColors.textHint),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${r.requestedCount} leads requested',
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            )),
+            ),
+          );
+        }),
       ],
     );
   }
-
-  Future<void> _openPicker(BuildContext context, _RequestRow r) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _RequestsLeadsPickerSheet(
-        rmName: r.rm.name,
-        rmVertical: r.rm.vertical,
-        poolLeads: poolLeads,
-        onConfirm: (leadIds) async {
-          await onBulkAssign(leadIds, r.rm.id, r.rm.name);
-        },
-      ),
-    );
-  }
-}
-
-class _RequestRow {
-  final dynamic rm; // UserModel — kept dynamic to avoid an extra import here.
-  final int requested;
-  const _RequestRow(this.rm, this.requested);
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1312,5 +1388,453 @@ List<String> _parseCsvLeadIds(String csv) {
     }
     if (id.isNotEmpty) out.add(id);
   }
+  return out;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Tab: Pool Upload
+// Admin / MIS picks a Source (Hurun / Monetization Event / Tele-calling
+// / etc.) → adds a single lead via the entry sheet OR pastes a CSV
+// (Full Name, Phone, Email, Vertical, Company, City). Every uploaded
+// row inherits the chosen source.
+// ────────────────────────────────────────────────────────────────────
+
+class _UploadPoolTab extends StatefulWidget {
+  final Future<void> Function() onUploaded;
+  const _UploadPoolTab({required this.onUploaded});
+
+  @override
+  State<_UploadPoolTab> createState() => _UploadPoolTabState();
+}
+
+class _UploadPoolTabState extends State<_UploadPoolTab> {
+  LeadSource? _source;
+  bool _busy = false;
+
+  final _repo = getIt<LeadRepository>();
+
+  Future<void> _addSingle() async {
+    if (_source == null) return;
+    final lead = await showModalBottomSheet<LeadModel>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SingleLeadEntrySheet(source: _source!),
+    );
+    if (lead == null || !mounted) return;
+    setState(() => _busy = true);
+    final n = await _repo.addPoolLeads([lead]);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    showCompassSnack(context,
+        message: 'Added $n lead to ${_source!.label} pool',
+        type: CompassSnackType.success);
+    await widget.onUploaded();
+  }
+
+  Future<void> _bulkUpload() async {
+    if (_source == null) return;
+    final result = await _showBulkUploadDialog(context, _source!);
+    if (result == null || !mounted) return;
+    setState(() => _busy = true);
+    final n = await _repo.addPoolLeads(result.leads);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final summary = result.skipped == 0
+        ? 'Added $n leads to ${_source!.label} pool'
+        : 'Added $n · ${result.skipped} rows skipped (missing required fields)';
+    showCompassSnack(context,
+        message: summary,
+        type: result.skipped == 0
+            ? CompassSnackType.success
+            : CompassSnackType.warn);
+    await widget.onUploaded();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('UPLOAD POOL LEADS',
+            style: AppTextStyles.labelSmall
+                .copyWith(color: AppColors.textSecondary, letterSpacing: 1)),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('1.  Pick the source / stream',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: LeadSource.values.map((s) {
+                  final selected = _source == s;
+                  return ChoiceChip(
+                    label: Text(s.label),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _source = s),
+                    selectedColor:
+                        AppColors.navyPrimary.withValues(alpha: 0.12),
+                    side: BorderSide(
+                      color: selected
+                          ? AppColors.navyPrimary.withValues(alpha: 0.5)
+                          : AppColors.borderDefault,
+                    ),
+                    labelStyle: AppTextStyles.bodySmall.copyWith(
+                      color: selected
+                          ? AppColors.navyPrimary
+                          : AppColors.textSecondary,
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 18),
+              Text('2.  Add leads',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                _source == null
+                    ? 'Select a source first.'
+                    : 'New leads will be tagged: source = ${_source!.label}, '
+                        'assignedRm = POOL, stage = lead.',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textHint),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: CompassButton.secondary(
+                      label: 'Add Single Lead',
+                      icon: Icons.person_add_alt_1,
+                      onPressed:
+                          _source == null || _busy ? null : _addSingle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: CompassButton(
+                      label: 'Bulk Upload (CSV)',
+                      icon: Icons.upload_file,
+                      onPressed:
+                          _source == null || _busy ? null : _bulkUpload,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Single-lead entry sheet ─────────────────────────────────────────
+
+class _SingleLeadEntrySheet extends StatefulWidget {
+  final LeadSource source;
+  const _SingleLeadEntrySheet({required this.source});
+
+  @override
+  State<_SingleLeadEntrySheet> createState() => _SingleLeadEntrySheetState();
+}
+
+class _SingleLeadEntrySheetState extends State<_SingleLeadEntrySheet> {
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+  final _email = TextEditingController();
+  final _company = TextEditingController();
+  final _city = TextEditingController();
+  String _vertical = 'EWG';
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _company.dispose();
+    _city.dispose();
+    super.dispose();
+  }
+
+  bool get _canSave => _name.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (!_canSave) return;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final lead = LeadModel(
+      id: 'POOL$ts',
+      fullName: _name.text.trim(),
+      phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+      email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+      companyName:
+          _company.text.trim().isEmpty ? null : _company.text.trim(),
+      city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+      source: widget.source,
+      stage: LeadStage.lead,
+      score: widget.source.baseScore,
+      assignedRmId: 'POOL',
+      assignedRmName: 'Shared Pool',
+      vertical: _vertical,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    Navigator.pop(context, lead);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderDefault,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('Add lead to ${widget.source.label} pool',
+                    style: AppTextStyles.heading3
+                        .copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                CompassTextField(
+                  controller: _name,
+                  label: 'Full name',
+                  isRequired: true,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 10),
+                CompassTextField(
+                  controller: _phone,
+                  label: 'Phone',
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 10),
+                CompassTextField(
+                  controller: _email,
+                  label: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 10),
+                Text('Vertical',
+                    style: AppTextStyles.labelSmall
+                        .copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: ['EWG', 'PWG'].map((v) {
+                    final selected = _vertical == v;
+                    return ChoiceChip(
+                      label: Text(v),
+                      selected: selected,
+                      onSelected: (_) => setState(() => _vertical = v),
+                      selectedColor:
+                          AppColors.navyPrimary.withValues(alpha: 0.12),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 10),
+                CompassTextField(
+                  controller: _company,
+                  label: 'Company',
+                ),
+                const SizedBox(height: 10),
+                CompassTextField(
+                  controller: _city,
+                  label: 'City',
+                ),
+                const SizedBox(height: 16),
+                CompassButton(
+                  label: 'Add to pool',
+                  icon: Icons.add,
+                  onPressed: _canSave ? _submit : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bulk-upload dialog (paste CSV) ──────────────────────────────────
+
+class _BulkUploadResult {
+  final List<LeadModel> leads;
+  final int skipped;
+  const _BulkUploadResult({required this.leads, required this.skipped});
+}
+
+Future<_BulkUploadResult?> _showBulkUploadDialog(
+    BuildContext context, LeadSource source) async {
+  final ctrl = TextEditingController();
+  final template = StringBuffer()
+    ..writeln('Full Name,Phone,Email,Vertical,Company,City')
+    ..writeln('Rajesh Mehta,+91 9876543210,rajesh@example.com,EWG,Mehta Industries,Mumbai')
+    ..writeln('Priya Bansal,+91 9123456780,priya@example.com,PWG,,Delhi');
+
+  final result = await showDialog<_BulkUploadResult>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Bulk upload — ${source.label}'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Format: Full Name, Phone, Email, Vertical (EWG/PWG), Company, City'),
+            const SizedBox(height: 4),
+            const Text(
+              'Source is set by the chosen stream — every row will be tagged accordingly.',
+              style: TextStyle(fontSize: 11, color: AppColors.textHint),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: template.toString()));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('Template copied to clipboard')),
+                    );
+                  },
+                  icon: const Icon(Icons.content_copy, size: 16),
+                  label: const Text('Copy template'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: ctrl,
+              maxLines: 8,
+              minLines: 6,
+              style:
+                  const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              decoration: const InputDecoration(
+                hintText: 'Paste CSV here…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel')),
+        TextButton(
+          onPressed: () {
+            final parsed = _parsePoolUploadCsv(ctrl.text, source);
+            Navigator.pop(ctx, parsed);
+          },
+          child: const Text('Import'),
+        ),
+      ],
+    ),
+  );
+  ctrl.dispose();
+  return result;
+}
+
+_BulkUploadResult _parsePoolUploadCsv(String csv, LeadSource source) {
+  final leads = <LeadModel>[];
+  var skipped = 0;
+  final ts = DateTime.now().millisecondsSinceEpoch;
+  var idx = 0;
+  for (final raw in csv.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    if (line.toLowerCase().startsWith('full name')) continue;
+    final cols = _splitCsvLine(line);
+    if (cols.length < 1 || cols[0].trim().isEmpty) {
+      skipped++;
+      continue;
+    }
+    final name = cols[0].trim();
+    final phone = cols.length > 1 ? cols[1].trim() : '';
+    final email = cols.length > 2 ? cols[2].trim() : '';
+    final verticalRaw =
+        (cols.length > 3 ? cols[3].trim() : '').toUpperCase();
+    final vertical =
+        (verticalRaw == 'EWG' || verticalRaw == 'PWG') ? verticalRaw : 'EWG';
+    final company = cols.length > 4 ? cols[4].trim() : '';
+    final city = cols.length > 5 ? cols[5].trim() : '';
+    leads.add(LeadModel(
+      id: 'POOL${ts}_${idx++}',
+      fullName: name,
+      phone: phone.isEmpty ? null : phone,
+      email: email.isEmpty ? null : email,
+      companyName: company.isEmpty ? null : company,
+      city: city.isEmpty ? null : city,
+      source: source,
+      stage: LeadStage.lead,
+      score: source.baseScore,
+      assignedRmId: 'POOL',
+      assignedRmName: 'Shared Pool',
+      vertical: vertical,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    ));
+  }
+  return _BulkUploadResult(leads: leads, skipped: skipped);
+}
+
+/// Naive CSV splitter that handles quoted fields containing commas.
+List<String> _splitCsvLine(String line) {
+  final out = <String>[];
+  final buf = StringBuffer();
+  var inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    final c = line[i];
+    if (c == '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (c == ',' && !inQuotes) {
+      out.add(buf.toString());
+      buf.clear();
+      continue;
+    }
+    buf.write(c);
+  }
+  out.add(buf.toString());
   return out;
 }

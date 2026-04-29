@@ -106,6 +106,11 @@ abstract class LeadRepository {
   /// Pool composition by vertical, source, AUM band.
   Future<Map<String, int>> getPoolBreakdown();
 
+  /// Append a batch of new leads directly to the shared pool. Used by the
+  /// Admin Pool Upload tab to ingest single-row entries or bulk-CSV
+  /// uploads. Returns the count actually inserted.
+  Future<int> addPoolLeads(List<LeadModel> leads);
+
   /// Returns the next pool lead matching the given filters without claiming
   /// it. [excludeIds] lets the RM "skip" a lead and ask for the next one.
   Future<LeadModel?> peekNextFromPool({

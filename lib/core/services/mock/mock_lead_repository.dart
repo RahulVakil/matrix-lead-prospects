@@ -466,6 +466,13 @@ class MockLeadRepository implements LeadRepository {
   }
 
   @override
+  Future<int> addPoolLeads(List<LeadModel> leads) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _pool.addAll(leads);
+    return leads.length;
+  }
+
+  @override
   Future<LeadModel?> peekNextFromPool({
     String? vertical,
     String? aumBand,

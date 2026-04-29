@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../core/enums/user_role.dart';
+import '../../../../core/models/lead_request.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
@@ -7,15 +10,23 @@ import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
+import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../cubit/get_lead_cubit.dart';
 
-/// Get Lead — RM / TL flow to claim leads from the shared pool.
-/// Simplified per the demo-ready spec:
-///   • Two KPIs (Total Requested ITD, Total Converted ITD)
-///   • Request Form with no weekly cap
-///   • Weekly cap banner / recent claims / wrong-contact bonus tiles all
-///     retired — they were noise for the actual demo.
+/// Get Lead — RM / TL flow to request leads from the shared pool.
+///
+/// Workflow change in this batch:
+///   - RM SUBMITS A REQUEST (no auto-claim). The request lands in Admin /
+///     MIS's Manage Pool → Requests tab.
+///   - On submit, RM + their TL each receive an in-app + email
+///     notification ("Request raised — you will be notified once leads
+///     are mapped").
+///   - When Admin assigns leads, both RM + TL receive a second
+///     notification with the assigned-leads list and the assignment date.
+///
+/// Pool-size references are intentionally absent. The request history
+/// section is the durable surface — RM sees their own; TL sees their team.
 class GetLeadScreen extends StatelessWidget {
   const GetLeadScreen({super.key});
 
@@ -24,14 +35,15 @@ class GetLeadScreen extends StatelessWidget {
     final user = context.watch<AuthCubit>().state.currentUser;
     if (user == null) return const SizedBox.shrink();
     return BlocProvider(
-      create: (_) => GetLeadCubit(rmId: user.id)..init(),
-      child: const _GetLeadBody(),
+      create: (_) => GetLeadCubit(viewer: user)..init(),
+      child: _GetLeadBody(viewerRole: user.role),
     );
   }
 }
 
 class _GetLeadBody extends StatelessWidget {
-  const _GetLeadBody();
+  final UserRole viewerRole;
+  const _GetLeadBody({required this.viewerRole});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +60,9 @@ class _GetLeadBody extends StatelessWidget {
         return HeroScaffold(
           header: HeroAppBar.simple(
             title: 'Get a lead',
-            subtitle: 'From the shared JMFS pool',
+            subtitle: viewerRole == UserRole.teamLead
+                ? 'Team requests · audit trail'
+                : 'Submit a request to Admin / MIS',
           ),
           body: state.isLoading
               ? const Center(child: CompassLoader())
@@ -60,9 +74,16 @@ class _GetLeadBody extends StatelessWidget {
                     children: [
                       _UserKpis(state: state),
                       const SizedBox(height: 16),
-                      _RequestForm(state: state),
-                      const SizedBox(height: 16),
-                      _PoolHelperLine(state: state),
+                      // TLs see the audit trail but don't submit requests
+                      // themselves through this screen — RMs do that.
+                      if (viewerRole != UserRole.teamLead) ...[
+                        _RequestForm(state: state),
+                        const SizedBox(height: 16),
+                      ],
+                      _RequestHistory(
+                        requests: state.requests,
+                        viewerRole: viewerRole,
+                      ),
                     ],
                   ),
                 ),
@@ -71,6 +92,8 @@ class _GetLeadBody extends StatelessWidget {
     );
   }
 }
+
+// ── KPI tiles ────────────────────────────────────────────────────────
 
 class _UserKpis extends StatelessWidget {
   final GetLeadState state;
@@ -83,7 +106,7 @@ class _UserKpis extends StatelessWidget {
       children: [
         Expanded(
           child: _Tile(
-            label: 'Total Leads Requested',
+            label: 'Total Leads Requested (ITD - Inception Till Date)',
             value: '${d.leadsRequestedItd}',
             color: AppColors.tealAccent,
             icon: Icons.outbox_outlined,
@@ -92,7 +115,7 @@ class _UserKpis extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _Tile(
-            label: 'Total Leads Converted',
+            label: 'Total Leads Converted (ITD - Inception Till Date)',
             value: '${d.poolLeadsConvertedItd}',
             color: AppColors.successGreen,
             icon: Icons.verified_outlined,
@@ -148,7 +171,7 @@ class _Tile extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.caption
                 .copyWith(color: AppColors.textSecondary, height: 1.3),
@@ -159,15 +182,15 @@ class _Tile extends StatelessWidget {
   }
 }
 
+// ── Request form ─────────────────────────────────────────────────────
+
 class _RequestForm extends StatelessWidget {
   final GetLeadState state;
   const _RequestForm({required this.state});
 
   @override
   Widget build(BuildContext context) {
-    final d = state.dashboard!;
-    final available = d.totalPoolLeads > 0 && !state.isSubmitting;
-    final maxRequestable = d.totalPoolLeads;
+    final available = !state.isSubmitting;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -191,7 +214,7 @@ class _RequestForm extends StatelessWidget {
               _Stepper(
                 value: state.requestedCount,
                 min: 0,
-                max: maxRequestable,
+                max: 50,
                 onChanged: available
                     ? (v) =>
                         context.read<GetLeadCubit>().setRequestedCount(v)
@@ -200,7 +223,7 @@ class _RequestForm extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'You will receive ${state.requestedCount} lead${state.requestedCount == 1 ? '' : 's'} from the pool.',
+                  'Request ${state.requestedCount} ${state.requestedCount == 1 ? "lead" : "leads"}.',
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -212,22 +235,19 @@ class _RequestForm extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: CompassButton(
-              label: state.isSubmitting ? 'Requesting…' : 'Request leads',
+              label: state.isSubmitting ? 'Submitting…' : 'Request leads',
               isLoading: state.isSubmitting,
               onPressed: available && state.requestedCount > 0
                   ? () async {
-                      final user =
-                          context.read<AuthCubit>().state.currentUser;
-                      if (user == null) return;
-                      final claimed = await context
+                      final ok = await context
                           .read<GetLeadCubit>()
-                          .request(rmName: user.name);
+                          .submitRequest();
                       if (!context.mounted) return;
-                      if (claimed.isNotEmpty) {
+                      if (ok) {
                         showCompassSnack(
                           context,
                           message:
-                              'Lead${claimed.length == 1 ? '' : 's'} #${claimed.map((l) => l.id).join(', #')} claimed.',
+                              'Request submitted. Admin will assign leads.',
                           type: CompassSnackType.success,
                         );
                       }
@@ -236,24 +256,6 @@ class _RequestForm extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PoolHelperLine extends StatelessWidget {
-  final GetLeadState state;
-  const _PoolHelperLine({required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    final total = state.dashboard?.totalPoolLeads ?? 0;
-    return Center(
-      child: Text(
-        total == 0
-            ? 'Pool is empty right now. Try again later.'
-            : '$total leads currently available in the shared pool.',
-        style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
       ),
     );
   }
@@ -304,6 +306,160 @@ class _Stepper extends StatelessWidget {
             icon: const Icon(Icons.add, size: 18),
             splashRadius: 18,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Request history (audit trail) ────────────────────────────────────
+
+class _RequestHistory extends StatelessWidget {
+  final List<LeadRequest> requests;
+  final UserRole viewerRole;
+  const _RequestHistory({required this.requests, required this.viewerRole});
+
+  @override
+  Widget build(BuildContext context) {
+    final isTl = viewerRole == UserRole.teamLead;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderDefault.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isTl ? 'Team request history' : 'Request history',
+            style: AppTextStyles.labelLarge.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (requests.isEmpty)
+            Text(
+              isTl
+                  ? 'No requests from your team yet.'
+                  : 'You haven\'t submitted any requests yet.',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textHint),
+            )
+          else
+            ...requests.map((r) => _RequestRow(req: r, isTl: isTl)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestRow extends StatelessWidget {
+  final LeadRequest req;
+  final bool isTl;
+  const _RequestRow({required this.req, required this.isTl});
+
+  Color get _statusColor {
+    switch (req.status) {
+      case LeadRequestStatus.pending:
+        return AppColors.warmAmber;
+      case LeadRequestStatus.fulfilled:
+        return AppColors.successGreen;
+      case LeadRequestStatus.cancelled:
+        return AppColors.dormantGray;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateStr = '${req.createdAt.day}/${req.createdAt.month}';
+    final fulfilledStr = req.fulfilledAt == null
+        ? null
+        : '${req.fulfilledAt!.day}/${req.fulfilledAt!.month}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _statusColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (isTl) ...[
+                Text(
+                  '${req.rmName} · ',
+                  style: AppTextStyles.labelLarge
+                      .copyWith(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ],
+              Text(
+                '${req.requestedCount} ${req.requestedCount == 1 ? "lead" : "leads"} requested',
+                style: AppTextStyles.labelLarge
+                    .copyWith(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  req.status.label,
+                  style: AppTextStyles.caption.copyWith(
+                    color: _statusColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Raised on $dateStr'
+            '${fulfilledStr != null ? "  ·  Assigned on $fulfilledStr" : ""}'
+            '${req.fulfilledByAdminName != null ? " by ${req.fulfilledByAdminName}" : ""}',
+            style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+          ),
+          if (req.assignedLeadIds.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: req.assignedLeadIds
+                  .map(
+                    (id) => InkWell(
+                      onTap: () =>
+                          context.push(RouteNames.leadDetailPath(id)),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceTertiary,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.borderDefault),
+                        ),
+                        child: Text(
+                          '#$id',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.navyPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );

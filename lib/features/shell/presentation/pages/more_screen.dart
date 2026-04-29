@@ -49,6 +49,9 @@ class MoreScreen extends StatelessWidget {
           _GridTile(icon: Icons.person_add_alt_1, label: 'New lead', onTap: () => context.push('/leads/new')),
           _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
           _GridTile(icon: Icons.fact_check_outlined, label: 'IB status', onTap: () => context.push('/ib-leads')),
+          // TL gets Get Lead tile so they can see their team's request
+          // history + audit trail of admin assignments.
+          _GridTile(icon: Icons.move_to_inbox_outlined, label: 'Get lead', onTap: () => context.push('/get-lead')),
           _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
         ];
       case UserRole.admin:

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../core/enums/lead_source.dart';
+import '../core/enums/lead_temperature.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/cubit/auth_cubit.dart';
 import '../features/shell/presentation/pages/app_shell.dart';
@@ -53,10 +55,24 @@ GoRouter createRouter(AuthCubit authCubit) {
         },
       ),
 
-      // Lead module routes
+      // Lead module routes. Optional `extra` map keys:
+      //   `status`     → 'hot' | 'warm' | 'cold' | 'onboarded'
+      //   `source`     → 'hurun' | 'monetizationEvent' | etc.
+      //   `activeOnly` → bool — exclude Dropped + Onboarded (matches the
+      //                   Leadership "Total Leads" tile)
+      //   `title`      → optional override for the AppBar subtitle
+      // Sent by the Leadership Dashboard's clickable KPI tiles.
       GoRoute(
         path: '/leads',
-        pageBuilder: (context, state) => _fadePage(const LeadInboxScreen()),
+        pageBuilder: (context, state) {
+          final extra = (state.extra is Map) ? state.extra as Map : const {};
+          return _fadePage(LeadInboxScreen(
+            initialStatus: _statusFromString(extra['status'] as String?),
+            initialSource: _sourceFromString(extra['source'] as String?),
+            initialActiveOnly: extra['activeOnly'] == true,
+            titleOverride: extra['title'] as String?,
+          ));
+        },
       ),
       GoRoute(
         path: '/leads/new',
@@ -161,6 +177,32 @@ GoRouter createRouter(AuthCubit authCubit) {
       ),
     ],
   );
+}
+
+// Helpers for parsing route extras passed to /leads from the
+// Leadership Dashboard's clickable KPI tiles.
+LeadTemperature? _statusFromString(String? s) {
+  if (s == null) return null;
+  switch (s.toLowerCase()) {
+    case 'hot':
+      return LeadTemperature.hot;
+    case 'warm':
+      return LeadTemperature.warm;
+    case 'cold':
+      return LeadTemperature.cold;
+    case 'onboarded':
+      return LeadTemperature.onboarded;
+    default:
+      return null;
+  }
+}
+
+LeadSource? _sourceFromString(String? s) {
+  if (s == null) return null;
+  for (final v in LeadSource.values) {
+    if (v.name == s) return v;
+  }
+  return null;
 }
 
 CustomTransitionPage _fadePage(Widget child) {

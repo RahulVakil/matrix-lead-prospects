@@ -127,11 +127,24 @@ class LeadershipDashboardScreen extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            _kpi('Total Leads', '${s.totalLeads}', AppColors.navyPrimary),
+            _kpi('Total Leads', '${s.totalLeads}', AppColors.navyPrimary,
+                onTap: () => context.push('/leads', extra: const {
+                      'activeOnly': true,
+                      'title': 'Total leads',
+                    })),
             const SizedBox(width: 12),
-            _kpi('Hot Leads', '${s.hotCount}', AppColors.hotRed),
+            _kpi('Hot Leads', '${s.hotCount}', AppColors.hotRed,
+                onTap: () => context.push('/leads', extra: const {
+                      'status': 'hot',
+                      'activeOnly': true,
+                      'title': 'Hot leads',
+                    })),
             const SizedBox(width: 12),
-            _kpi('Converted', '${s.conversions}', AppColors.successGreen),
+            _kpi('Converted', '${s.conversions}', AppColors.successGreen,
+                onTap: () => context.push('/leads', extra: const {
+                      'status': 'onboarded',
+                      'title': 'Onboarded leads',
+                    })),
           ],
         ),
         const SizedBox(height: 12),
@@ -140,16 +153,26 @@ class LeadershipDashboardScreen extends StatelessWidget {
             _kpi('IB Leads', '${s.ibCount}', AppColors.stageOpportunity,
                 onTap: () => context.push('/ib-leads')),
             const SizedBox(width: 12),
-            _kpi('Hurun', '${s.hurunCount}', AppColors.tealAccent),
+            _kpi('Hurun', '${s.hurunCount}', AppColors.tealAccent,
+                onTap: () => context.push('/leads', extra: const {
+                      'source': 'hurun',
+                      'activeOnly': true,
+                      'title': 'Hurun leads',
+                    })),
             const SizedBox(width: 12),
-            _kpi('Monetization', '${s.monetizationEventCount}',
-                AppColors.warmAmber),
+            _kpi('Monetization Events', '${s.monetizationEventCount}',
+                AppColors.warmAmber,
+                onTap: () => context.push('/leads', extra: const {
+                      'source': 'monetizationEvent',
+                      'activeOnly': true,
+                      'title': 'Monetization Event leads',
+                    })),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            // Insightful add-on: org-wide / scoped conversion rate.
+            // Conversion Rate stays a non-clickable derived metric.
             _kpi('Conversion Rate', convRate, AppColors.navyDark),
           ],
         ),
@@ -188,21 +211,24 @@ class LeadershipDashboardScreen extends StatelessWidget {
   // ── Pipeline by stage ──────────────────────────────────────────────
 
   Widget _pipelineSection(LeadershipDashboardState s) {
-    // Lead Status was retired in this batch; pipeline now breaks down by
-    // Temperature (Hot / Warm / Cold) which is what the leadership team
-    // actually steers by. Counts come straight from cubit state — no new
-    // data plumbing.
+    // Unified Lead Funnel — 4 buckets aligned with the new "Status"
+    // vocabulary: Hot / Warm / Cold / Onboarded. With the LeadModel
+    // temperature getter routing onboarded leads to the new
+    // `onboarded` enum value, the cubit's hotCount/warmCount/coldCount
+    // already exclude onboarded leads, so adding the Onboarded bar
+    // (sourced from `s.conversions`) cannot double-count.
     final stages = [
       ('Hot', s.hotCount, AppColors.hotRed),
       ('Warm', s.warmCount, AppColors.warmAmber),
       ('Cold', s.coldCount, AppColors.coldBlue),
+      ('Onboarded', s.conversions, AppColors.successGreen),
     ];
     final total = stages.fold<int>(0, (sum, st) => sum + st.$2);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('TEMPERATURE BREAKDOWN',
+        Text('LEAD FUNNEL',
             style: AppTextStyles.labelSmall.copyWith(letterSpacing: 1)),
         const SizedBox(height: 12),
         Container(

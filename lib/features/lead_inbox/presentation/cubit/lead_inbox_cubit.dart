@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
+import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/lead_repository.dart';
 
@@ -11,7 +13,16 @@ class LeadInboxState extends Equatable {
   final bool isLoading;
   final List<LeadModel> leads;
   final int totalCount;
-  final LeadStage? stageFilter;
+  /// Filter on the unified Lead Status (Hot / Warm / Cold / Onboarded).
+  /// The internal type is `LeadTemperature` for code-churn reasons but the
+  /// UX speaks of "Status" everywhere.
+  final LeadTemperature? statusFilter;
+  /// Optional source filter (used by Leadership KPI tiles like Hurun and
+  /// Monetization Events). Read-only from a route extra; no UI control.
+  final LeadSource? sourceFilter;
+  /// When true the inbox excludes Dropped + Onboarded stages — matches the
+  /// Leadership "Total leads" KPI tile semantics.
+  final bool activeOnly;
   final bool ibLinkedOnly;
   final bool myLeadsOnly;
   final String? sortBy;
@@ -23,7 +34,9 @@ class LeadInboxState extends Equatable {
     this.isLoading = true,
     this.leads = const [],
     this.totalCount = 0,
-    this.stageFilter,
+    this.statusFilter,
+    this.sourceFilter,
+    this.activeOnly = false,
     this.ibLinkedOnly = false,
     this.myLeadsOnly = false,
     this.sortBy = 'name',
@@ -36,8 +49,11 @@ class LeadInboxState extends Equatable {
     bool? isLoading,
     List<LeadModel>? leads,
     int? totalCount,
-    LeadStage? stageFilter,
-    bool clearStageFilter = false,
+    LeadTemperature? statusFilter,
+    bool clearStatusFilter = false,
+    LeadSource? sourceFilter,
+    bool clearSourceFilter = false,
+    bool? activeOnly,
     bool? ibLinkedOnly,
     bool? myLeadsOnly,
     String? sortBy,
@@ -50,8 +66,11 @@ class LeadInboxState extends Equatable {
       isLoading: isLoading ?? this.isLoading,
       leads: leads ?? this.leads,
       totalCount: totalCount ?? this.totalCount,
-      stageFilter:
-          clearStageFilter ? null : (stageFilter ?? this.stageFilter),
+      statusFilter:
+          clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
+      sourceFilter:
+          clearSourceFilter ? null : (sourceFilter ?? this.sourceFilter),
+      activeOnly: activeOnly ?? this.activeOnly,
       ibLinkedOnly: ibLinkedOnly ?? this.ibLinkedOnly,
       myLeadsOnly: myLeadsOnly ?? this.myLeadsOnly,
       sortBy: sortBy ?? this.sortBy,
@@ -67,7 +86,9 @@ class LeadInboxState extends Equatable {
         isLoading,
         leads.length,
         totalCount,
-        stageFilter,
+        statusFilter,
+        sourceFilter,
+        activeOnly,
         ibLinkedOnly,
         myLeadsOnly,
         sortBy,
@@ -81,7 +102,16 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
   final String rmId;
   Timer? _searchDebounce;
 
-  LeadInboxCubit({required this.rmId}) : super(const LeadInboxState());
+  LeadInboxCubit({
+    required this.rmId,
+    LeadTemperature? initialStatus,
+    LeadSource? initialSource,
+    bool initialActiveOnly = false,
+  }) : super(LeadInboxState(
+          statusFilter: initialStatus,
+          sourceFilter: initialSource,
+          activeOnly: initialActiveOnly,
+        ));
 
   @override
   Future<void> close() {
@@ -98,18 +128,29 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
       final repo = getIt<LeadRepository>();
       final result = await repo.getLeads(
         page: state.page,
-        stage: state.stageFilter,
+        // Status filter rides on the repo's `temperature` param — the mock
+        // impl filters via LeadModel.temperature which now returns
+        // `onboarded` for stage==onboard, so the filter works for all 4
+        // status values.
+        temperature: state.statusFilter,
+        source: state.sourceFilter,
         searchQuery: state.searchQuery,
         sortBy: state.sortBy,
-        assignedRmId: rmId,
+        // Pass rmId only when "my leads only" is on — leadership-tile
+        // navigations want the broader set scoped by status/source instead.
+        assignedRmId: state.myLeadsOnly ? rmId : null,
       );
 
       var items = result.items;
       if (state.ibLinkedOnly) {
         items = items.where((l) => l.ibLeadIds.isNotEmpty).toList();
       }
-      if (state.myLeadsOnly) {
-        items = items.where((l) => l.assignedRmId == rmId).toList();
+      if (state.activeOnly) {
+        // Match the Leadership "Total leads" tile: exclude Dropped + Onboard.
+        items = items
+            .where((l) =>
+                l.stage != LeadStage.dropped && l.stage != LeadStage.onboard)
+            .toList();
       }
 
       emit(state.copyWith(
@@ -122,10 +163,10 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
     }
   }
 
-  void setStageFilter(LeadStage? stage) {
+  void setStatusFilter(LeadTemperature? status) {
     emit(state.copyWith(
-      stageFilter: stage,
-      clearStageFilter: stage == null,
+      statusFilter: status,
+      clearStatusFilter: status == null,
       page: 1,
     ));
     loadLeads(refresh: true);

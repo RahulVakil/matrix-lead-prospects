@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
+import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -34,9 +36,26 @@ Color _stageRagColor(LeadStage stage) {
   }
 }
 
-/// All Leads listing — mobile-first, clean filter sheet, RAG stage color.
+/// All Leads listing — mobile-first, clean filter sheet, status pill.
+/// Optional initial filters can be passed via route extras (used by the
+/// Leadership Dashboard's clickable KPI tiles to open a pre-filtered view).
 class LeadInboxScreen extends StatelessWidget {
-  const LeadInboxScreen({super.key});
+  /// Pre-applied Status filter (Hot / Warm / Cold / Onboarded). The user
+  /// can still change it via the filter sheet.
+  final LeadTemperature? initialStatus;
+  final LeadSource? initialSource;
+  /// When true, the inbox excludes Dropped + Onboarded stages — matches
+  /// the Leadership "Total leads" KPI tile semantics.
+  final bool initialActiveOnly;
+  final String? titleOverride;
+
+  const LeadInboxScreen({
+    super.key,
+    this.initialStatus,
+    this.initialSource,
+    this.initialActiveOnly = false,
+    this.titleOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -44,14 +63,20 @@ class LeadInboxScreen extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     return BlocProvider(
-      create: (_) => LeadInboxCubit(rmId: user.id)..loadLeads(refresh: true),
-      child: const _InboxBody(),
+      create: (_) => LeadInboxCubit(
+        rmId: user.id,
+        initialStatus: initialStatus,
+        initialSource: initialSource,
+        initialActiveOnly: initialActiveOnly,
+      )..loadLeads(refresh: true),
+      child: _InboxBody(titleOverride: titleOverride),
     );
   }
 }
 
 class _InboxBody extends StatefulWidget {
-  const _InboxBody();
+  final String? titleOverride;
+  const _InboxBody({this.titleOverride});
 
   @override
   State<_InboxBody> createState() => _InboxBodyState();
@@ -72,13 +97,14 @@ class _InboxBodyState extends State<_InboxBody> {
       builder: (context, state) {
         final cubit = context.read<LeadInboxCubit>();
         final activeFilterCount =
-            (state.stageFilter != null ? 1 : 0) +
+            (state.statusFilter != null ? 1 : 0) +
             (state.ibLinkedOnly ? 1 : 0) +
             (state.myLeadsOnly ? 1 : 0);
 
         return HeroScaffold(
           header: HeroAppBar.simple(
-              title: 'All leads', subtitle: '${state.totalCount} total'),
+              title: widget.titleOverride ?? 'All leads',
+              subtitle: '${state.totalCount} total'),
           // FAB routes straight to New Wealth Lead. Direct IB lead creation
           // is disallowed — IB leads must originate from a wealth lead via
           // the "Convert to IB Lead" 3-dot action on the wealth detail screen.
@@ -210,7 +236,7 @@ class _InboxBodyState extends State<_InboxBody> {
                                 TextButton(
                                   onPressed: () {
                                     _searchCtrl.clear();
-                                    cubit.setStageFilter(null);
+                                    cubit.setStatusFilter(null);
                                     cubit.setIbLinkedOnly(false);
                                     cubit.search('');
                                   },
@@ -267,12 +293,12 @@ class _InboxBodyState extends State<_InboxBody> {
       context: ctx,
       backgroundColor: Colors.transparent,
       builder: (_) => _FilterSheetBody(
-        initialStage: state.stageFilter,
+        initialStatus: state.statusFilter,
         initialIbOnly: state.ibLinkedOnly,
         initialMyOnly: state.myLeadsOnly,
         showMyLeadsToggle: context.read<AuthCubit>().state.currentUser?.role == UserRole.teamLead,
-        onApply: (stage, ibOnly, myOnly) {
-          cubit.setStageFilter(stage);
+        onApply: (status, ibOnly, myOnly) {
+          cubit.setStatusFilter(status);
           cubit.setIbLinkedOnly(ibOnly);
           cubit.setMyLeadsOnly(myOnly);
         },
@@ -282,14 +308,15 @@ class _InboxBodyState extends State<_InboxBody> {
 }
 
 class _FilterSheetBody extends StatefulWidget {
-  final LeadStage? initialStage;
+  final LeadTemperature? initialStatus;
   final bool initialIbOnly;
   final bool initialMyOnly;
   final bool showMyLeadsToggle;
-  final void Function(LeadStage? stage, bool ibOnly, bool myOnly) onApply;
+  final void Function(LeadTemperature? status, bool ibOnly, bool myOnly)
+      onApply;
 
   const _FilterSheetBody({
-    required this.initialStage,
+    required this.initialStatus,
     required this.initialIbOnly,
     required this.initialMyOnly,
     required this.showMyLeadsToggle,
@@ -301,21 +328,26 @@ class _FilterSheetBody extends StatefulWidget {
 }
 
 class _FilterSheetBodyState extends State<_FilterSheetBody> {
-  late LeadStage? _stageF;
+  late LeadTemperature? _statusF;
   late bool _ibOnly;
   late bool _myOnly;
 
   @override
   void initState() {
     super.initState();
-    _stageF = widget.initialStage;
+    _statusF = widget.initialStatus;
     _ibOnly = widget.initialIbOnly;
     _myOnly = widget.initialMyOnly;
   }
 
-  static final _stages = [
-    ...LeadStage.activePipeline,
-    LeadStage.dropped,
+  /// User-facing 4-bucket Status filter — Hot / Warm / Cold / Onboarded.
+  /// Dormant is intentionally excluded from the picker (it's an edge state
+  /// driven by stage transitions, not a normal filter target).
+  static const _statuses = [
+    LeadTemperature.hot,
+    LeadTemperature.warm,
+    LeadTemperature.cold,
+    LeadTemperature.onboarded,
   ];
 
   @override
@@ -350,7 +382,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => setState(() {
-                    _stageF = null;
+                    _statusF = null;
                     _ibOnly = false;
                     _myOnly = false;
                   }),
@@ -367,18 +399,18 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                CompassChoiceChip<LeadStage?>(
+                CompassChoiceChip<LeadTemperature?>(
                   value: null,
-                  groupValue: _stageF,
+                  groupValue: _statusF,
                   label: 'All',
-                  onSelected: (_) => setState(() => _stageF = null),
+                  onSelected: (_) => setState(() => _statusF = null),
                 ),
-                ..._stages.map((s) => CompassChoiceChip<LeadStage?>(
+                ..._statuses.map((s) => CompassChoiceChip<LeadTemperature?>(
                       value: s,
-                      groupValue: _stageF,
+                      groupValue: _statusF,
                       label: s.label,
-                      color: _stageRagColor(s),
-                      onSelected: (v) => setState(() => _stageF = v),
+                      color: s.color,
+                      onSelected: (v) => setState(() => _statusF = v),
                     )),
               ],
             ),
@@ -424,7 +456,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                       borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
-                  widget.onApply(_stageF, _ibOnly, _myOnly);
+                  widget.onApply(_statusF, _ibOnly, _myOnly);
                   Navigator.of(context).pop();
                 },
                 child: const Text('Apply'),
@@ -569,6 +601,24 @@ class _LeadCard extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      // RM tagging — surfaced on every card so leadership
+                      // (TL / Regional / Zonal / CEO / Admin) can see who
+                      // owns each lead at a glance when they drill from a
+                      // KPI tile into a filtered list.
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'RM: ${lead.assignedRmName}',
+                              style: AppTextStyles.caption
+                                  .copyWith(color: AppColors.textHint),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ],
