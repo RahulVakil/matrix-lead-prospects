@@ -46,8 +46,7 @@ class GetLeadState extends Equatable {
         isLoading,
         dashboard?.totalPoolLeads,
         dashboard?.leadsRequestedItd,
-        dashboard?.claimsInLast7Days,
-        dashboard?.wrongContactDropsInLast7Days,
+        dashboard?.poolLeadsConvertedItd,
         requestedCount,
         recentClaims.length,
         error,
@@ -68,7 +67,8 @@ class GetLeadCubit extends Cubit<GetLeadState> {
       emit(state.copyWith(
         isLoading: false,
         dashboard: d,
-        requestedCount: d.remainingThisWeek > 0 ? 1 : 0,
+        // Default the request quantity to 1 if the pool has anything.
+        requestedCount: d.totalPoolLeads > 0 ? 1 : 0,
       ));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
@@ -76,8 +76,8 @@ class GetLeadCubit extends Cubit<GetLeadState> {
   }
 
   void setRequestedCount(int n) {
-    final cap = state.dashboard?.remainingThisWeek ?? 0;
-    final clamped = n.clamp(0, cap);
+    final maxAvail = state.dashboard?.totalPoolLeads ?? 0;
+    final clamped = n.clamp(0, maxAvail);
     emit(state.copyWith(requestedCount: clamped));
   }
 
@@ -91,13 +91,11 @@ class GetLeadCubit extends Cubit<GetLeadState> {
         rmName: rmName,
         count: n,
       );
-      final recents = [...claimed, ...state.recentClaims].take(10).toList();
       final d = await _repo.getLeadDashboard(rmId);
       emit(state.copyWith(
         isSubmitting: false,
         dashboard: d,
-        recentClaims: recents,
-        requestedCount: d.remainingThisWeek > 0 ? 1 : 0,
+        requestedCount: d.totalPoolLeads > 0 ? 1 : 0,
       ));
       return claimed;
     } catch (e) {

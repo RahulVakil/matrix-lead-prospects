@@ -80,11 +80,12 @@ abstract class LeadRepository {
   /// Append an arbitrary timeline entry — used by IB lead created, deal edits, etc.
   Future<void> appendTimelineEntry(TimelineEntryModel entry);
 
-  /// Drop a lead with a mandatory reason. Only RM can drop.
+  /// Drop a lead. Notes are mandatory; reason is optional (the RM may not
+  /// have a clean enum value for the situation). Only RM can drop.
   Future<LeadModel> dropLead(
     String leadId, {
-    required DropReason reason,
-    String? notes,
+    DropReason? reason,
+    required String notes,
     required String droppedByUserId,
   });
 

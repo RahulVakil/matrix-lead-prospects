@@ -354,8 +354,8 @@ class MockLeadRepository implements LeadRepository {
   @override
   Future<LeadModel> dropLead(
     String leadId, {
-    required DropReason reason,
-    String? notes,
+    DropReason? reason,
+    required String notes,
     required String droppedByUserId,
   }) async {
     await Future.delayed(const Duration(milliseconds: 300));
@@ -514,14 +514,8 @@ class MockLeadRepository implements LeadRepository {
     required int count,
   }) async {
     if (count <= 0) return const [];
-    // Gate against the effective cap.
-    final dash = await getLeadDashboard(rmId);
-    if (count > dash.remainingThisWeek) {
-      throw StateError(
-        'Weekly cap reached. Remaining this week: ${dash.remainingThisWeek} '
-        '(effective cap ${dash.effectiveWeeklyCap}).',
-      );
-    }
+    // Weekly cap retired in the demo-ready batch — no gate. Caller is
+    // limited only by the size of the pool itself.
     await Future.delayed(const Duration(milliseconds: 400));
     final claimed = <LeadModel>[];
     for (var i = 0; i < count; i++) {
@@ -542,23 +536,7 @@ class MockLeadRepository implements LeadRepository {
   @override
   Future<GetLeadDashboardData> getLeadDashboard(String rmId) async {
     await Future.delayed(const Duration(milliseconds: 120));
-    final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final log = _claimLog[rmId] ?? const [];
-    final claimsIn7 = log.where((t) => t.isAfter(cutoff)).length;
-    final wrongContactIn7 = _leads
-        .where((l) =>
-            l.droppedByUserId == rmId &&
-            l.dropReason == DropReason.wrongContact &&
-            l.droppedAt != null &&
-            l.droppedAt!.isAfter(cutoff))
-        .length;
-    final requestedItd = log.length;
-    final droppedFromRequested = _leads
-        .where((l) =>
-            _poolOriginLeadIds.contains(l.id) &&
-            l.droppedByUserId == rmId &&
-            l.stage == LeadStage.dropped)
-        .length;
     final convertedFromRequested = _leads
         .where((l) =>
             _poolOriginLeadIds.contains(l.id) &&
@@ -567,11 +545,8 @@ class MockLeadRepository implements LeadRepository {
         .length;
     return GetLeadDashboardData(
       totalPoolLeads: _pool.length,
-      leadsRequestedItd: requestedItd,
-      requestedLeadsDroppedItd: droppedFromRequested,
+      leadsRequestedItd: log.length,
       poolLeadsConvertedItd: convertedFromRequested,
-      claimsInLast7Days: claimsIn7,
-      wrongContactDropsInLast7Days: wrongContactIn7,
     );
   }
 

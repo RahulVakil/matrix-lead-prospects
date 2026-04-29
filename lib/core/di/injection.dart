@@ -6,6 +6,7 @@ import '../repositories/coverage_repository.dart';
 import '../repositories/ib_lead_repository.dart';
 import '../repositories/lead_repository.dart';
 import '../repositories/notification_repository.dart';
+import '../repositories/reassignment_repository.dart';
 import '../services/in_app_notification_service.dart';
 import '../services/mock/mock_activity_repository.dart';
 import '../services/mock/mock_audit_repository.dart';
@@ -14,6 +15,7 @@ import '../services/mock/mock_coverage_repository.dart';
 import '../services/mock/mock_ib_lead_repository.dart';
 import '../services/mock/mock_lead_repository.dart';
 import '../services/mock/mock_notification_repository.dart';
+import '../services/mock/mock_reassignment_repository.dart';
 import '../services/notification_service.dart';
 
 final getIt = GetIt.instance;
@@ -27,6 +29,7 @@ void setupDependencies() {
   getIt.registerLazySingleton<IbLeadRepository>(() => MockIbLeadRepository());
   getIt.registerLazySingleton<NotificationRepository>(() => MockNotificationRepository());
   getIt.registerLazySingleton<AuditRepository>(() => MockAuditRepository());
+  getIt.registerLazySingleton<ReassignmentRepository>(() => MockReassignmentRepository());
 
   // Notification service — FCM-shaped interface, in-app implementation today.
   getIt.registerLazySingleton<NotificationService>(

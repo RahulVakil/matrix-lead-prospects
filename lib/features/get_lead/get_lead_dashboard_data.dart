@@ -1,26 +1,20 @@
-/// Aggregate counts shown on the Get Lead Dashboard (RM + TL).
+/// Aggregate counts for the simplified Get Lead screen.
+/// Per the demo-ready spec we surface only: total pool size + the two
+/// per-RM lifetime KPIs (Total Requested / Total Converted from Pool).
+/// The weekly cap and wrong-contact bonus model has been retired.
 class GetLeadDashboardData {
+  /// Total leads currently sitting in the shared pool.
   final int totalPoolLeads;
+
+  /// Lifetime count of leads this RM has requested from the pool.
   final int leadsRequestedItd;
-  final int requestedLeadsDroppedItd;
+
+  /// Lifetime count of pool-origin leads this RM has Onboarded.
   final int poolLeadsConvertedItd;
-  final int claimsInLast7Days;
-  final int wrongContactDropsInLast7Days;
 
   const GetLeadDashboardData({
     required this.totalPoolLeads,
     required this.leadsRequestedItd,
-    required this.requestedLeadsDroppedItd,
     required this.poolLeadsConvertedItd,
-    required this.claimsInLast7Days,
-    required this.wrongContactDropsInLast7Days,
   });
-
-  /// Base weekly cap is 4. Each wrong-contact drop in the last 7 days grants
-  /// +1 exception budget. Returns the effective cap.
-  int get effectiveWeeklyCap => 4 + wrongContactDropsInLast7Days;
-
-  /// Leads the RM can still request right now.
-  int get remainingThisWeek =>
-      (effectiveWeeklyCap - claimsInLast7Days).clamp(0, 1 << 30);
 }

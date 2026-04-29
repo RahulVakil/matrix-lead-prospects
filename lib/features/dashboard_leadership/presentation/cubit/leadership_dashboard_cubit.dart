@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/enums/user_role.dart';
@@ -74,6 +75,10 @@ class LeadershipDashboardState extends Equatable {
   final int ibCount;
   final int conversions; // onboarded
   final int poolCount;
+  /// Leads where source == LeadSource.hurun (system-tagged from the Hurun pool).
+  final int hurunCount;
+  /// Leads where source == LeadSource.monetizationEvent (assigned via JM events).
+  final int monetizationEventCount;
 
   // Pipeline (Lead / Profiling / Engage / Onboarded)
   final Map<LeadStage, int> pipeline;
@@ -98,10 +103,21 @@ class LeadershipDashboardState extends Equatable {
     this.ibCount = 0,
     this.conversions = 0,
     this.poolCount = 0,
+    this.hurunCount = 0,
+    this.monetizationEventCount = 0,
     this.pipeline = const {},
     this.children = const [],
     this.activity = const ActivityCounts24h(),
   });
+
+  /// Conversion rate (Onboarded / Active total). Returned as a percentage
+  /// rounded to one decimal. The Leadership dashboard surfaces this as the
+  /// 7th KPI tile alongside the 6 spec'd tiles.
+  double get conversionRatePct {
+    final active = totalLeads + conversions;
+    if (active == 0) return 0;
+    return (conversions / active) * 100;
+  }
 
   @override
   List<Object?> get props => [
@@ -118,6 +134,8 @@ class LeadershipDashboardState extends Equatable {
         ibCount,
         conversions,
         poolCount,
+        hurunCount,
+        monetizationEventCount,
         pipeline,
         children.length,
         activity,
@@ -153,6 +171,7 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
 
       var totalLeads = 0;
       var hotC = 0, warmC = 0, coldC = 0, droppedC = 0, conversions = 0;
+      var hurunC = 0, eventC = 0;
       final pipeline = <LeadStage, int>{};
       var calls = 0, meetings = 0, notes = 0, stageAdvances = 0, dropped = 0;
       final since = DateTime.now().subtract(const Duration(hours: 24));
@@ -165,6 +184,8 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
         }
         if (l.stage == LeadStage.onboard) conversions++;
         pipeline[l.stage] = (pipeline[l.stage] ?? 0) + 1;
+        if (l.source == LeadSource.hurun) hurunC++;
+        if (l.source == LeadSource.monetizationEvent) eventC++;
         switch (l.temperature) {
           case LeadTemperature.hot:
             hotC++;
@@ -238,6 +259,8 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
         ibCount: ibCount,
         conversions: conversions,
         poolCount: poolCount,
+        hurunCount: hurunC,
+        monetizationEventCount: eventC,
         pipeline: pipeline,
         children: children,
         activity: ActivityCounts24h(

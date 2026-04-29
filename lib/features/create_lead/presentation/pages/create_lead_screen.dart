@@ -12,8 +12,10 @@ import '../../../../core/models/consent_record.dart';
 import '../../../../core/models/coverage_check_result.dart';
 import '../../../../core/models/key_contact_model.dart';
 import '../../../../core/models/lead_model.dart';
+import '../../../../core/models/reassignment_request.dart';
 import '../../../../core/repositories/coverage_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
+import '../../../../core/repositories/reassignment_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_button.dart';
@@ -174,11 +176,33 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       if (!mounted || decision == null) return;
       if (decision == CoverageDecision.cancel ||
           decision == CoverageDecision.requestReassignment) {
+        // Persist the reassignment request so Admin/MIS can act on it
+        // from the Manage Pool → REASSIGNMENT tab. The matched record on
+        // the result tells us who currently owns the client.
+        if (decision == CoverageDecision.requestReassignment &&
+            user != null &&
+            result.matchedRecord != null) {
+          final matched = result.matchedRecord!;
+          await getIt<ReassignmentRepository>().create(
+            ReassignmentRequest(
+              id: 'RR_${DateTime.now().millisecondsSinceEpoch}',
+              matchedClientId: matched.id,
+              matchedClientName: matched.clientName,
+              sourceRmId: user.id,
+              sourceRmName: user.name,
+              targetRmId: matched.rmId,
+              targetRmName: matched.rmName,
+              reason:
+                  'Coverage match — ${user.name} requesting reassignment of ${matched.clientName}',
+              createdAt: DateTime.now(),
+            ),
+          );
+        }
         if (mounted) {
           showCompassSnack(
             context,
             message: decision == CoverageDecision.requestReassignment
-                ? 'Reassignment requested'
+                ? 'Reassignment request submitted to Admin'
                 : 'Cancelled',
           );
           context.pop();
@@ -518,7 +542,10 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: LeadSource.values
+              // Add Lead form shows only RM-pickable sources. The system-
+              // assigned tags (hurun / monetizationEvent) are filtered out;
+              // they only get attached to pool leads and bulk imports.
+              children: LeadSource.addableValues
                   .map((s) => CompassChoiceChip<LeadSource>(
                         value: s,
                         groupValue: _source,

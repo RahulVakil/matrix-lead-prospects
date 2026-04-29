@@ -27,7 +27,6 @@ import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../activity/presentation/widgets/activity_quick_log_sheet.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../stage/presentation/widgets/mark_lost_sheet.dart';
-import '../../../stage/presentation/widgets/stage_advance_sheet.dart';
 import '../widgets/audit_trail_section.dart';
 import '../widgets/data_export_sheet.dart';
 import '../widgets/deletion_request_sheet.dart';
@@ -122,24 +121,13 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     );
   }
 
-  Future<void> _advanceStage() async {
+  /// Push the RM-Assisted Onboarding journey for this lead. The submitted
+  /// onboarding form stamps stage = LeadStage.onboard and writes a
+  /// structured one-liner into notes.
+  Future<void> _onboard() async {
     if (_lead == null) return;
-    await StageAdvanceSheet.show(
-      context,
-      currentStage: _lead!.stage,
-      lead: _lead,
-      onAdvance: (next, notes) async {
-        await _leadRepo.updateLeadStage(_lead!.id, next, notes: notes);
-        if (mounted) {
-          showCompassSnack(
-            context,
-            message: 'Moved to ${next.label}',
-            type: CompassSnackType.success,
-          );
-        }
-        await _load();
-      },
-    );
+    await context.push('/leads/${_lead!.id}/onboard');
+    if (mounted) await _load();
   }
 
   Future<void> _parkOrClose() async {
@@ -185,16 +173,18 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     }
 
     final lead = _lead!;
-    final nextStage = lead.stage.nextStage;
 
     return HeroScaffold(
       header: _LeadHeroHeader(lead: lead, onMenu: _onMenuSelected),
+      // Bottom bar shows two actions for active leads only: Drop + Onboard.
+      // The Lead Status / stage-advance flow was retired in the demo-ready
+      // batch — temperature is the only customer-facing status now, and
+      // onboarding is the single forward action.
       bottomBar: lead.stage.isTerminal
           ? null
           : _BottomActionBar(
-              nextStageLabel: nextStage?.label,
               onDrop: _dropLead,
-              onAdvance: nextStage != null ? _advanceStage : null,
+              onOnboard: _onboard,
             ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
@@ -396,9 +386,6 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       case 'edit':
         _editLead();
         break;
-      case 'drop':
-        _dropLead();
-        break;
       case 'export':
         _exportData();
         break;
@@ -465,15 +452,8 @@ class _LeadHeroHeader extends StatelessWidget {
                         title: Text('Convert to IB Lead'),
                       ),
                     ),
-                  const PopupMenuItem(
-                    value: 'drop',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.remove_circle_outline, size: 20, color: Colors.orange),
-                      title: Text('Drop lead'),
-                    ),
-                  ),
+                  // Drop lead is now in the bottom action bar — duplicate
+                  // menu entry removed so there's a single source of truth.
                 ],
               ),
             ],
@@ -515,11 +495,6 @@ class _LeadHeroHeader extends StatelessWidget {
                           _HeroChip(
                             color: lead.temperature.color,
                             label: lead.temperature.label,
-                          ),
-                          const SizedBox(width: 6),
-                          _HeroChip(
-                            color: lead.stage.color,
-                            label: lead.stage.label,
                           ),
                           if (lead.ibLeadIds.isNotEmpty) ...[
                             const SizedBox(width: 6),
@@ -1310,14 +1285,12 @@ class _DetailsBlockState extends State<_DetailsBlock>
 // ────────────────────────────────────────────────────────────────────
 
 class _BottomActionBar extends StatelessWidget {
-  final String? nextStageLabel;
   final VoidCallback onDrop;
-  final VoidCallback? onAdvance;
+  final VoidCallback onOnboard;
 
   const _BottomActionBar({
-    required this.nextStageLabel,
     required this.onDrop,
-    required this.onAdvance,
+    required this.onOnboard,
   });
 
   @override
@@ -1328,7 +1301,8 @@ class _BottomActionBar extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surfacePrimary,
           border: Border(
-            top: BorderSide(color: AppColors.borderDefault.withValues(alpha: 0.5)),
+            top:
+                BorderSide(color: AppColors.borderDefault.withValues(alpha: 0.5)),
           ),
           boxShadow: [
             BoxShadow(
@@ -1338,23 +1312,23 @@ class _BottomActionBar extends StatelessWidget {
             ),
           ],
         ),
+        // Two equal-weight CTAs: Drop (danger) + Onboard (primary).
+        // No more "advance stage" — Lead Status was retired across the app.
         child: Row(
           children: [
-            TextButton(
-              onPressed: onDrop,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.errorRed,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            Expanded(
+              child: CompassButton.danger(
+                label: 'Drop',
+                icon: Icons.remove_circle_outline,
+                onPressed: onDrop,
               ),
-              child: const Text('Drop lead'),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: CompassButton(
-                label: nextStageLabel != null
-                    ? 'Advance to $nextStageLabel'
-                    : 'Converted',
-                onPressed: onAdvance,
+                label: 'Onboard Lead',
+                icon: Icons.handshake_outlined,
+                onPressed: onOnboard,
               ),
             ),
           ],

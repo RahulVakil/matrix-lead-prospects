@@ -9,6 +9,7 @@ import '../features/create_lead/presentation/pages/create_lead_screen.dart';
 import '../features/get_lead/presentation/pages/get_lead_screen.dart';
 import '../features/profiling/presentation/pages/checker_queue_screen.dart';
 import '../features/admin/presentation/pages/manage_pool_screen.dart';
+import '../features/client_onboarding/presentation/pages/rm_assisted_onboarding_screen.dart';
 import '../features/clients/presentation/pages/client_detail_screen.dart';
 import '../features/coverage/presentation/pages/coverage_check_screen.dart';
 import '../features/dashboard_leadership/presentation/pages/leadership_dashboard_screen.dart';
@@ -69,6 +70,13 @@ GoRouter createRouter(AuthCubit authCubit) {
         path: '/leads/:leadId',
         pageBuilder: (context, state) => _fadePage(
           LeadDetailScreen(leadId: state.pathParameters['leadId']!),
+        ),
+      ),
+      // RM-Assisted Onboarding — replaces the old "Advance Stage" CTA.
+      GoRoute(
+        path: '/leads/:leadId/onboard',
+        pageBuilder: (context, state) => _fadePage(
+          RmAssistedOnboardingScreen(leadId: state.pathParameters['leadId']!),
         ),
       ),
 

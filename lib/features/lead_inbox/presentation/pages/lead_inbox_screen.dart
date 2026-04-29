@@ -486,7 +486,11 @@ class _LeadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ragColor = _stageRagColor(lead.stage);
+    // RM-facing listings show Temperature (Hot / Warm / Cold) only — Lead
+    // Status (stage) was retired in the demo-readiness batch. Stage still
+    // drives internal pipeline math but isn't surfaced on cards.
+    final temp = lead.temperature;
+    final ragColor = temp.color;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -571,7 +575,7 @@ class _LeadCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Status pill + badges (right-aligned column)
+                // Temperature pill + badges (right-aligned column)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -583,7 +587,7 @@ class _LeadCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        lead.stage.label,
+                        temp.label,
                         style: AppTextStyles.caption.copyWith(
                           color: ragColor,
                           fontWeight: FontWeight.w700,

@@ -113,6 +113,12 @@ class LeadershipDashboardScreen extends StatelessWidget {
   // ── KPI strip ──────────────────────────────────────────────────────
 
   Widget _kpiStrip(BuildContext context, LeadershipDashboardState s) {
+    // Six spec'd widgets + one insightful add-on (Conversion Rate %).
+    // Laid out as 3 rows of 3 — leaving the bottom-right slot for a
+    // leadership-friendly Conversion Rate tile so the strip reads as
+    // 6 hard counts + 1 derived metric.
+    final convRate =
+        '${s.conversionRatePct.toStringAsFixed(s.conversionRatePct >= 10 ? 0 : 1)}%';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -123,9 +129,9 @@ class LeadershipDashboardScreen extends StatelessWidget {
           children: [
             _kpi('Total Leads', '${s.totalLeads}', AppColors.navyPrimary),
             const SizedBox(width: 12),
-            _kpi('Hot', '${s.hotCount}', AppColors.hotRed),
+            _kpi('Hot Leads', '${s.hotCount}', AppColors.hotRed),
             const SizedBox(width: 12),
-            _kpi('Conversions', '${s.conversions}', AppColors.successGreen),
+            _kpi('Converted', '${s.conversions}', AppColors.successGreen),
           ],
         ),
         const SizedBox(height: 12),
@@ -134,9 +140,17 @@ class LeadershipDashboardScreen extends StatelessWidget {
             _kpi('IB Leads', '${s.ibCount}', AppColors.stageOpportunity,
                 onTap: () => context.push('/ib-leads')),
             const SizedBox(width: 12),
-            _kpi('Dropped', '${s.droppedCount}', AppColors.errorRed),
+            _kpi('Hurun', '${s.hurunCount}', AppColors.tealAccent),
             const SizedBox(width: 12),
-            _kpi('In Pool', '${s.poolCount}', AppColors.coldBlue),
+            _kpi('Monetization', '${s.monetizationEventCount}',
+                AppColors.warmAmber),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            // Insightful add-on: org-wide / scoped conversion rate.
+            _kpi('Conversion Rate', convRate, AppColors.navyDark),
           ],
         ),
       ],
@@ -174,20 +188,21 @@ class LeadershipDashboardScreen extends StatelessWidget {
   // ── Pipeline by stage ──────────────────────────────────────────────
 
   Widget _pipelineSection(LeadershipDashboardState s) {
+    // Lead Status was retired in this batch; pipeline now breaks down by
+    // Temperature (Hot / Warm / Cold) which is what the leadership team
+    // actually steers by. Counts come straight from cubit state — no new
+    // data plumbing.
     final stages = [
-      ('Lead', s.pipeline[LeadStage.lead] ?? 0, AppColors.stageNew),
-      ('Profiling', s.pipeline[LeadStage.profiling] ?? 0,
-          AppColors.stageProfiling),
-      ('Engage', s.pipeline[LeadStage.engage] ?? 0, AppColors.stageEngage),
-      ('Onboarded', s.pipeline[LeadStage.onboard] ?? 0,
-          AppColors.stageClient),
+      ('Hot', s.hotCount, AppColors.hotRed),
+      ('Warm', s.warmCount, AppColors.warmAmber),
+      ('Cold', s.coldCount, AppColors.coldBlue),
     ];
     final total = stages.fold<int>(0, (sum, st) => sum + st.$2);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('PIPELINE BY STAGE',
+        Text('TEMPERATURE BREAKDOWN',
             style: AppTextStyles.labelSmall.copyWith(letterSpacing: 1)),
         const SizedBox(height: 12),
         Container(

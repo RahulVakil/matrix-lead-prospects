@@ -7,10 +7,13 @@ import '../../../../core/widgets/compass_button.dart';
 import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 
-/// Bottom sheet for dropping a lead — reason is mandatory.
+/// Bottom sheet for dropping a lead.
+/// Per the demo-ready spec: notes are mandatory (≥10 chars); reason is now
+/// optional. RM may pick a reason chip for analytics, but a meaningful
+/// remark is what the dropped-leads tab shows.
 class DropLeadSheet extends StatefulWidget {
   final String leadName;
-  final void Function(DropReason reason, String? notes) onDrop;
+  final void Function(DropReason? reason, String notes) onDrop;
 
   const DropLeadSheet({
     super.key,
@@ -21,7 +24,7 @@ class DropLeadSheet extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required String leadName,
-    required void Function(DropReason reason, String? notes) onDrop,
+    required void Function(DropReason? reason, String notes) onDrop,
   }) {
     return showCompassSheet(
       context,
@@ -38,12 +41,15 @@ class DropLeadSheet extends StatefulWidget {
 class _DropLeadSheetState extends State<DropLeadSheet> {
   DropReason? _reason;
   final _notesCtrl = TextEditingController();
+  static const int _minNotesLength = 10;
 
   @override
   void dispose() {
     _notesCtrl.dispose();
     super.dispose();
   }
+
+  bool get _canDrop => _notesCtrl.text.trim().length >= _minNotesLength;
 
   @override
   Widget build(BuildContext context) {
@@ -57,13 +63,12 @@ class _DropLeadSheetState extends State<DropLeadSheet> {
         ),
         const SizedBox(height: 4),
         Text(
-          'This lead will be marked as Dropped and visible to Admin/MIS for review.',
+          'This lead will be marked as Dropped. Notes are mandatory; the reason is optional.',
           style: AppTextStyles.bodySmall,
         ),
         const SizedBox(height: 16),
-
         Text(
-          'REASON (REQUIRED)',
+          'REASON (OPTIONAL)',
           style: AppTextStyles.caption.copyWith(
             color: AppColors.textSecondary,
             fontWeight: FontWeight.w700,
@@ -84,39 +89,22 @@ class _DropLeadSheetState extends State<DropLeadSheet> {
             );
           }).toList(),
         ),
-
-        if (_reason == DropReason.other) ...[
-          const SizedBox(height: 16),
-          CompassTextField(
-            controller: _notesCtrl,
-            label: 'Specify reason',
-            isRequired: true,
-            maxLines: 2,
-          ),
-        ] else ...[
-          const SizedBox(height: 16),
-          CompassTextField(
-            controller: _notesCtrl,
-            label: 'Notes (optional)',
-            maxLines: 2,
-            maxLength: 300,
-          ),
-        ],
+        const SizedBox(height: 16),
+        CompassTextField(
+          controller: _notesCtrl,
+          label: 'Notes (required, min $_minNotesLength chars)',
+          isRequired: true,
+          maxLines: 3,
+          maxLength: 400,
+          onChanged: (_) => setState(() {}),
+        ),
         const SizedBox(height: 20),
-
         CompassButton.danger(
           label: 'Drop this lead',
           icon: Icons.remove_circle_outline,
-          onPressed: _reason != null &&
-                  (_reason != DropReason.other ||
-                      _notesCtrl.text.trim().isNotEmpty)
+          onPressed: _canDrop
               ? () {
-                  widget.onDrop(
-                    _reason!,
-                    _notesCtrl.text.trim().isEmpty
-                        ? null
-                        : _notesCtrl.text.trim(),
-                  );
+                  widget.onDrop(_reason, _notesCtrl.text.trim());
                   Navigator.pop(context);
                 }
               : null,
