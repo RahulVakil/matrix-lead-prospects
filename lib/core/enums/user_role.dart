@@ -77,11 +77,11 @@ enum LeadershipLevel {
       case LeadershipLevel.team:
         return 'Team';
       case LeadershipLevel.region:
-        return 'Region';
+        return 'Regional';
       case LeadershipLevel.zone:
         return 'Zone';
       case LeadershipLevel.all:
-        return 'Organization';
+        return 'Organisation';
     }
   }
 

@@ -4,6 +4,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/enums/lead_source.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/enums/lead_temperature.dart';
+import '../../../../core/enums/timeframe_filter.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/models/ib_lead_model.dart';
 import '../../../../core/models/lead_model.dart';
@@ -86,8 +87,13 @@ class LeadershipDashboardState extends Equatable {
   // Children breakdown (RMs in team / TLs in region / Regions in zone / Zones in org)
   final List<ChildBreakdownRow> children;
 
-  // Last-24h activity (computed from recentActivities on the scoped leads)
+  // Activity counts rolled up over the chosen [timeframe] window.
   final ActivityCounts24h activity;
+
+  // Active timeframe filter — drives the chip row and the `since` cutoff
+  // applied to lead and activity aggregations. Default = inception
+  // (preserves prior all-time behaviour).
+  final TimeframeFilter timeframe;
 
   const LeadershipDashboardState({
     this.isLoading = true,
@@ -108,6 +114,7 @@ class LeadershipDashboardState extends Equatable {
     this.pipeline = const {},
     this.children = const [],
     this.activity = const ActivityCounts24h(),
+    this.timeframe = TimeframeFilter.inception,
   });
 
   /// Conversion rate (Onboarded / Active total). Returned as a percentage
@@ -139,6 +146,7 @@ class LeadershipDashboardState extends Equatable {
         pipeline,
         children.length,
         activity,
+        timeframe,
       ];
 }
 
@@ -162,19 +170,34 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
           scopeName: scopeName,
         ));
 
-  Future<void> load() async {
-    emit(state.copyWith(isLoading: true));
+  Future<void> load({TimeframeFilter? timeframe}) async {
+    final tf = timeframe ?? state.timeframe;
+    emit(state.copyWith(isLoading: true, timeframe: tf));
     try {
       // Pull the scoped lead set in one shot. Mock repo applies the filter
       // by looking up each lead's assignedRm in the user table.
-      final leads = await _scopedLeads();
+      final allScoped = await _scopedLeads();
+
+      // Apply the timeframe window: a lead is "active in window" if its
+      // createdAt OR lastContactedAt falls at/after `since`. Inception
+      // returns null → no slicing, all-time data.
+      final since = tf.since;
+      final leads = since == null
+          ? allScoped
+          : allScoped
+              .where((l) =>
+                  l.createdAt.isAfter(since) ||
+                  (l.lastContactedAt?.isAfter(since) ?? false))
+              .toList();
 
       var totalLeads = 0;
       var hotC = 0, warmC = 0, coldC = 0, droppedC = 0, conversions = 0;
       var hurunC = 0, eventC = 0;
       final pipeline = <LeadStage, int>{};
       var calls = 0, meetings = 0, notes = 0, stageAdvances = 0, dropped = 0;
-      final since = DateTime.now().subtract(const Duration(hours: 24));
+      // Activity rollup uses the same `since` as the lead-window filter.
+      // Inception → epoch (counts every activity ever logged).
+      final activitySince = since ?? DateTime.fromMillisecondsSinceEpoch(0);
 
       for (final l in leads) {
         if (l.stage == LeadStage.dropped) {
@@ -199,9 +222,9 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
           default:
             break;
         }
-        // Activity in last 24h on this lead's recentActivities feed.
+        // Activity within the chosen window on this lead's recentActivities feed.
         for (final a in l.recentActivities) {
-          if (a.dateTime.isBefore(since)) continue;
+          if (a.dateTime.isBefore(activitySince)) continue;
           switch (a.type.name) {
             case 'call':
               calls++;
@@ -230,6 +253,7 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
         final ibAll = await _ibRepo.getAllForBranchHead('SCOPE');
         for (final ib in ibAll) {
           if (!ib.status.isApproved) continue;
+          if (since != null && ib.createdAt.isBefore(since)) continue;
           if (_rmIdInScope(ib.createdById)) ibCount++;
         }
       } catch (_) {}
@@ -270,10 +294,18 @@ class LeadershipDashboardCubit extends Cubit<LeadershipDashboardState> {
           stageAdvances: stageAdvances,
           dropped: dropped,
         ),
+        timeframe: tf,
       ));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
+  }
+
+  /// Switch the active timeframe and reload. Emits the chip-state echo
+  /// immediately so the UI reflects the new selection during the reload.
+  Future<void> setTimeframe(TimeframeFilter t) async {
+    emit(state.copyWith(timeframe: t));
+    await load(timeframe: t);
   }
 
   Future<List<LeadModel>> _scopedLeads() async {
@@ -398,6 +430,7 @@ extension on LeadershipDashboardState {
   LeadershipDashboardState copyWith({
     bool? isLoading,
     String? error,
+    TimeframeFilter? timeframe,
   }) {
     return LeadershipDashboardState(
       isLoading: isLoading ?? this.isLoading,
@@ -413,9 +446,12 @@ extension on LeadershipDashboardState {
       ibCount: ibCount,
       conversions: conversions,
       poolCount: poolCount,
+      hurunCount: hurunCount,
+      monetizationEventCount: monetizationEventCount,
       pipeline: pipeline,
       children: children,
       activity: activity,
+      timeframe: timeframe ?? this.timeframe,
     );
   }
 }

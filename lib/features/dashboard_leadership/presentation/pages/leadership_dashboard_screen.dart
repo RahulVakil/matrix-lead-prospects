@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_dimensions.dart';
-import '../../../../core/enums/lead_stage.dart';
+import '../../../../core/enums/timeframe_filter.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/compass_chip.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
@@ -61,7 +62,7 @@ class LeadershipDashboardScreen extends StatelessWidget {
           scopeName = user.zoneName;
           break;
         case LeadershipLevel.all:
-          scopeName = 'Organization';
+          scopeName = 'Organisation';
           break;
       }
     }
@@ -74,7 +75,7 @@ class LeadershipDashboardScreen extends StatelessWidget {
       )..load(),
       child: BlocBuilder<LeadershipDashboardCubit, LeadershipDashboardState>(
         builder: (context, state) {
-          final title = '${level.label} dashboard';
+          final title = '${level.label} Dashboard';
           final subtitle = scopeName ?? '';
           return HeroScaffold(
             header: HeroAppBar.simple(title: title, subtitle: subtitle),
@@ -93,6 +94,8 @@ class LeadershipDashboardScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(
                           AppDimensions.screenPadding),
                       children: [
+                        _timeframeChips(context, state),
+                        const SizedBox(height: 16),
                         _kpiStrip(context, state),
                         const SizedBox(height: 24),
                         _pipelineSection(state),
@@ -106,6 +109,30 @@ class LeadershipDashboardScreen extends StatelessWidget {
                   ),
           );
         },
+      ),
+    );
+  }
+
+  // ── Timeframe filter chips ─────────────────────────────────────────
+
+  Widget _timeframeChips(BuildContext context, LeadershipDashboardState s) {
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: TimeframeFilter.values
+            .map((tf) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: CompassChoiceChip<TimeframeFilter>(
+                    value: tf,
+                    groupValue: s.timeframe,
+                    label: tf.label,
+                    onSelected: (v) => context
+                        .read<LeadershipDashboardCubit>()
+                        .setTimeframe(v),
+                  ),
+                ))
+            .toList(),
       ),
     );
   }
@@ -388,7 +415,7 @@ class LeadershipDashboardScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${s.level.label.toUpperCase()} ACTIVITY (LAST 24H)',
+        Text('${s.level.label.toUpperCase()} – ${s.timeframe.activityHeading}',
             style: AppTextStyles.labelSmall.copyWith(letterSpacing: 1)),
         const SizedBox(height: 12),
         _activityStat(Icons.phone, 'Calls Made', s.activity.calls),
