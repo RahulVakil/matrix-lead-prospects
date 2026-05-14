@@ -133,10 +133,15 @@ class _CoverageResultBody extends StatelessWidget {
       ];
     }
     switch (result.status) {
+      // For every "we found a match" outcome, two clear options:
+      // ask Admin to reassign, or cancel and walk away.
       case CoverageStatus.existingClient:
+      case CoverageStatus.duplicateLead:
+      case CoverageStatus.requiresReview:
         return [
-          CompassButton.danger(
+          CompassButton(
             label: 'Request reassignment',
+            icon: Icons.swap_horiz,
             onPressed: () =>
                 Navigator.of(context).pop(CoverageDecision.requestReassignment),
           ),
@@ -146,31 +151,26 @@ class _CoverageResultBody extends StatelessWidget {
             onPressed: () => Navigator.of(context).pop(CoverageDecision.cancel),
           ),
         ];
-      case CoverageStatus.duplicateLead:
+      // DND can't be reassigned — only Compliance can override. Single
+      // Cancel button + an explanatory line.
+      case CoverageStatus.dnd:
         return [
-          CompassButton(
-            label: 'Save anyway',
-            onPressed: () =>
-                Navigator.of(context).pop(CoverageDecision.saveAnyway),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Talk to your Compliance Admin if an exception is needed.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
           CompassButton.tertiary(
             label: 'Cancel',
             onPressed: () => Navigator.of(context).pop(CoverageDecision.cancel),
           ),
         ];
-      case CoverageStatus.requiresReview:
-        return [
-          CompassButton(
-            label: 'Continue capture',
-            onPressed: () => Navigator.of(context).pop(CoverageDecision.proceed),
-          ),
-          const SizedBox(height: 10),
-          CompassButton.tertiary(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(context).pop(CoverageDecision.cancel),
-          ),
-        ];
+      // Clear path — shouldn't reach here normally (save proceeds on
+      // clear), but keep for safety.
       default:
         return [
           CompassButton(

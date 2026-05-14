@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/enums/activity_type.dart';
 import '../../../../core/enums/audit_action.dart';
+import '../../../../core/enums/next_action_type.dart';
 import '../../../../core/enums/retention_status.dart';
-import '../../../../core/models/audit_log_entry.dart';
+import '../../../../core/models/activity_model.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/models/next_action_model.dart';
 import '../../../../core/models/timeline_entry_model.dart';
@@ -27,12 +27,23 @@ import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../activity/presentation/widgets/activity_quick_log_sheet.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../stage/presentation/widgets/mark_lost_sheet.dart';
-import '../widgets/audit_trail_section.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/enums/user_role.dart';
+import '../widgets/call_action_chooser_sheet.dart';
+import '../widgets/call_logs_viewer_sheet.dart';
+import '../widgets/meeting_logs_viewer_sheet.dart';
+import '../widgets/note_logs_viewer_sheet.dart';
+import '../widgets/tl_call_chooser_sheet.dart';
+import '../widgets/tl_meeting_chooser_sheet.dart';
+import '../widgets/meeting_action_chooser_sheet.dart';
+import '../widgets/meeting_picker_sheet.dart';
 import '../widgets/data_export_sheet.dart';
 import '../widgets/deletion_request_sheet.dart';
 import '../widgets/convert_to_ib_sheet.dart';
 import '../widgets/edit_lead_sheet.dart';
+import '../widgets/meeting_create_sheet.dart';
 import '../widgets/retention_banner.dart';
+import '../widgets/whatsapp_composer_sheet.dart';
 import '../../../stage/presentation/widgets/drop_lead_sheet.dart';
 
 /// Lead Detail Hub — rebuilt to compass-real visual standard.
@@ -53,7 +64,6 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
 
   LeadModel? _lead;
   List<TimelineEntryModel> _timeline = const [];
-  List<AuditLogEntry> _auditEntries = const [];
   bool _isLoading = true;
 
   @override
@@ -67,9 +77,9 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     try {
       final lead = await _leadRepo.getLeadById(widget.leadId);
       final timeline = await _leadRepo.getTimeline(widget.leadId);
-      final audit = await _auditRepo.getForEntity('lead', widget.leadId);
 
-      // Log PII view in audit trail
+      // PII view still recorded in the audit log (no UI surface, but kept
+      // for compliance plumbing — DPDP-PII privacy ticket consumes it).
       final user = context.read<AuthCubit>().state.currentUser;
       if (user != null) {
         await _auditRepo.log(
@@ -86,7 +96,6 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       setState(() {
         _lead = lead;
         _timeline = timeline;
-        _auditEntries = audit;
         _isLoading = false;
       });
     } catch (_) {
@@ -102,7 +111,7 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       leadId: _lead!.id,
       leadName: _lead!.fullName,
       preselectedType: preselected,
-      onSave: (type, notes, outcome, duration) async {
+      onSave: (type, notes, outcome, duration, nextActionType, nextActionDate) async {
         await _activityRepo.logActivity(
           leadId: _lead!.id,
           type: type,
@@ -113,12 +122,72 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           loggedById: user.id,
           loggedByName: user.name,
         );
+        await _persistNextAction(nextActionType, nextActionDate);
         if (mounted) {
           showCompassSnack(context, message: 'Logged', type: CompassSnackType.success);
         }
         await _load();
+        // Chain into the meeting create flow when the chosen follow-up
+        // is a meeting — RM gets to capture title/link/mode without
+        // re-tapping into a separate sheet later.
+        if (mounted &&
+            nextActionType == NextActionType.meeting &&
+            nextActionDate != null) {
+          await _chainFollowUpMeeting(nextActionDate, user);
+        }
       },
     );
+  }
+
+  /// Persist the next-action chip on the lead. Called from every action
+  /// surface (Call log, WhatsApp composer, Meeting sheet) so each follows
+  /// the same persistence path.
+  Future<void> _persistNextAction(
+    NextActionType? type,
+    DateTime? date,
+  ) async {
+    if (_lead == null) return;
+    if (type == null || type == NextActionType.none) return;
+    await _leadRepo.setNextAction(
+      _lead!.id,
+      NextActionModel(type: type, dueAt: date),
+    );
+  }
+
+  /// Open the MeetingCreateSheet pre-loaded with the next-action date.
+  /// Logs the resulting future meeting as an activity entry. The sheet
+  /// hides its own next-action picker to avoid recursion.
+  Future<void> _chainFollowUpMeeting(
+    DateTime when,
+    user,
+  ) async {
+    if (_lead == null) return;
+    final result = await MeetingCreateSheet.show(
+      context,
+      leadName: _lead!.fullName,
+      prefilledWhen: when,
+      hideNextAction: true,
+    );
+    if (!mounted || result == null) return;
+    final isFuture = result.when.isAfter(DateTime.now());
+    await _activityRepo.logActivity(
+      leadId: _lead!.id,
+      type: ActivityType.meeting,
+      dateTime: result.when,
+      durationMinutes: result.durationMinutes,
+      notes: result.toLogNotes(),
+      outcome: isFuture ? ActivityOutcome.followUp : ActivityOutcome.completed,
+      loggedById: user.id,
+      loggedByName: user.name,
+    );
+    if (mounted) {
+      showCompassSnack(
+        context,
+        message: 'Follow-up meeting scheduled',
+        type: CompassSnackType.success,
+      );
+      await _load();
+    }
   }
 
   /// Push the RM-Assisted Onboarding journey for this lead. The submitted
@@ -174,13 +243,17 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
 
     final lead = _lead!;
 
+    final isTlView = _isTlView;
+
     return HeroScaffold(
-      header: _LeadHeroHeader(lead: lead, onMenu: _onMenuSelected),
-      // Bottom bar shows two actions for active leads only: Drop + Onboard.
-      // The Lead Status / stage-advance flow was retired in the demo-ready
-      // batch — temperature is the only customer-facing status now, and
-      // onboarding is the single forward action.
-      bottomBar: lead.stage.isTerminal
+      header: _LeadHeroHeader(
+        lead: lead,
+        onMenu: _onMenuSelected,
+        isTlView: isTlView,
+      ),
+      // Bottom bar (Drop + Onboard) is hidden for TL view — TL has no
+      // state-change rights on a reportee's lead.
+      bottomBar: (lead.stage.isTerminal || isTlView)
           ? null
           : _BottomActionBar(
               onDrop: _dropLead,
@@ -189,6 +262,10 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: [
+          if (isTlView) ...[
+            _TlReadOnlyBanner(rmName: lead.assignedRmName),
+            const SizedBox(height: 14),
+          ],
           _SummaryStrip(lead: lead),
           const SizedBox(height: 18),
           if (lead.nextAction != null) ...[
@@ -221,21 +298,23 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
               },
             ),
           _QuickActionGrid(
-            onCall: () => _logActivity(ActivityType.call),
+            onCall: _onCallTap,
             // WhatsApp tile is dormant when no phone is on file (wealth Add
             // Lead allows phone-less entries — email-only / walk-in leads).
             onWhatsApp: (lead.phone == null || lead.phone!.isEmpty)
                 ? null
-                : () => _openWhatsApp(lead.phone!),
-            onMeet: () => _logActivity(ActivityType.meeting),
-            onNote: () => _logActivity(ActivityType.note),
+                : _onWhatsappTap,
+            onMeet: _onMeetTap,
+            onNote: _onNoteTap,
           ),
           const SizedBox(height: 16),
 
-          // Prominent IB convert CTA
-          if (lead.ibLeadIds.isEmpty)
+          // IB convert CTA — hidden for TL view (TL can't initiate
+          // state changes on a reportee's lead). The "already converted"
+          // info card stays visible for context.
+          if (lead.ibLeadIds.isEmpty && !isTlView)
             _IbConvertCard(onTap: () => _onMenuSelected('ib'))
-          else
+          else if (lead.ibLeadIds.isNotEmpty)
             _IbConvertedInfo(ibLeadId: lead.ibLeadIds.first),
           const SizedBox(height: 16),
 
@@ -248,24 +327,413 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           _Timeline(entries: _timeline),
           const SizedBox(height: 24),
           _DetailsBlock(lead: lead),
-          const SizedBox(height: 12),
-          AuditTrailSection(entries: _auditEntries),
           const SizedBox(height: 96),
         ],
       ),
     );
   }
 
-  Future<void> _openWhatsApp(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
-    final waNum = digits.startsWith('91') ? digits : '91$digits';
-    final uri = Uri.parse('https://wa.me/$waNum');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  // ── Call ─────────────────────────────────────────────────────────
+  // Call tile opens a chooser: dial-and-log or log-only. Dialer launch
+  // uses tel:; on return we auto-open the log sheet preselected to call.
+
+  /// True when the current viewer is a Team Lead looking at a lead that
+  /// belongs to a reportee (i.e. not the TL's own lead). In this mode the
+  /// TL gets read-only access — no logging on the RM's behalf.
+  bool get _isTlView {
+    final user = context.read<AuthCubit>().state.currentUser;
+    final lead = _lead;
+    if (user == null || lead == null) return false;
+    return user.role == UserRole.teamLead &&
+        lead.assignedRmId != user.id;
+  }
+
+  Future<void> _onCallTap() async {
+    final lead = _lead;
+    if (lead == null) return;
+
+    // Team Lead viewing a reportee's lead → "Call now" or "View call logs".
+    // No "Log past call" path: TL cannot log on the RM's behalf.
+    if (_isTlView) {
+      final loggedCalls =
+          await _activityRepo.getActivitiesForLead(lead.id);
+      final callCount = loggedCalls
+          .where((a) => a.type == ActivityType.call)
+          .length;
+      if (!mounted) return;
+      final choice = await TlCallChooserSheet.show(
+        context,
+        leadName: lead.fullName,
+        phone: lead.phone,
+        loggedCallCount: callCount,
+      );
+      if (!mounted || choice == null) return;
+      switch (choice) {
+        case TlCallChoice.callNow:
+          if (lead.phone == null || lead.phone!.isEmpty) return;
+          final ok =
+              await CallActionChooserSheet.launchDialer(lead.phone!);
+          if (!mounted) return;
+          if (!ok) {
+            showCompassSnack(context,
+                message: 'Couldn\'t open the dialer.',
+                type: CompassSnackType.warn);
+          }
+          // Intentionally NO log prompt on return — TL can't log on
+          // the RM's behalf.
+          break;
+        case TlCallChoice.viewLogs:
+          await CallLogsViewerSheet.show(
+            context,
+            leadName: lead.fullName,
+            activities: loggedCalls,
+          );
+          break;
+      }
+      return;
     }
-    // After returning from WhatsApp, prompt to log the activity
+
+    // Default flow — RM (lead owner) flow with the existing chooser
+    // (Call now / Log a past call) and auto-log on return.
+    final choice = await CallActionChooserSheet.show(
+      context,
+      leadName: lead.fullName,
+      phone: lead.phone,
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case CallChoice.callNow:
+        if (lead.phone == null || lead.phone!.isEmpty) return;
+        final ok = await CallActionChooserSheet.launchDialer(lead.phone!);
+        if (!mounted) return;
+        if (!ok) {
+          showCompassSnack(context,
+              message: 'Couldn\'t open the dialer.', type: CompassSnackType.warn);
+          return;
+        }
+        // After return from dialer, prompt to log details.
+        await _logActivity(ActivityType.call);
+        break;
+      case CallChoice.logPast:
+        await _logActivity(ActivityType.call);
+        break;
+    }
+  }
+
+  // ── WhatsApp ─────────────────────────────────────────────────────
+  // WhatsApp tile opens the composer directly. Every send auto-logs the
+  // activity, so a separate "log a past WhatsApp" path was redundant —
+  // for messages sent outside the app, the Note tile is the right home.
+
+  Future<void> _onWhatsappTap() async {
+    final lead = _lead;
+    if (lead == null) return;
+
+    // TL viewing reportee → just launch wa.me with the lead's phone.
+    // No composer, no log creation — TL has no log rights on RM's lead.
+    if (_isTlView) {
+      if (lead.phone == null || lead.phone!.isEmpty) return;
+      final digits = lead.phone!.replaceAll(RegExp(r'[^\d+]'), '');
+      final waUrl = Uri.parse(
+          'https://wa.me/${digits.replaceFirst(RegExp(r'^\+'), '')}');
+      final ok = await launchUrl(waUrl,
+          mode: LaunchMode.externalApplication);
+      if (!mounted) return;
+      if (!ok) {
+        showCompassSnack(context,
+            message: "Couldn't open WhatsApp.",
+            type: CompassSnackType.warn);
+      }
+      return;
+    }
+
+    // Default flow — RM (lead owner) opens composer with auto-log on send.
+    return _openWhatsappComposer();
+  }
+
+  /// Opens the composer; on Send launches wa.me with the message
+  /// pre-filled, logs the activity (with message body + attachments in
+  /// notes), persists the next action, and chains a follow-up meeting
+  /// when the RM picked Meeting as the next action.
+  Future<void> _openWhatsappComposer() async {
+    final lead = _lead;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (lead == null || user == null) return;
+    if (lead.phone == null || lead.phone!.isEmpty) return;
+
+    // Take the first token of the full name as a "first name" for the
+    // template substitution. Good enough for the prototype; production
+    // should use the canonical first-name field on the lead.
+    final firstName = lead.fullName.trim().split(RegExp(r'\s+')).first;
+
+    final result = await WhatsappComposerSheet.show(
+      context,
+      leadName: lead.fullName,
+      leadFirstName: firstName,
+      rmName: user.name,
+      phone: lead.phone!,
+    );
+    if (!mounted || result == null) return;
+
+    final notesBuf = StringBuffer('[${result.templateKey}] ${result.message}');
+    if (result.attachmentNames.isNotEmpty) {
+      notesBuf.write('\nAttached: ${result.attachmentNames.join(", ")}');
+    }
+    await _activityRepo.logActivity(
+      leadId: lead.id,
+      type: ActivityType.whatsApp,
+      dateTime: DateTime.now(),
+      notes: notesBuf.toString(),
+      outcome: ActivityOutcome.completed,
+      loggedById: user.id,
+      loggedByName: user.name,
+    );
+
+    await _persistNextAction(result.nextActionType, result.nextActionDate);
+
     if (mounted) {
-      _logActivity(ActivityType.whatsApp);
+      showCompassSnack(context,
+          message: 'WhatsApp sent and logged',
+          type: CompassSnackType.success);
+      await _load();
+    }
+    if (mounted &&
+        result.nextActionType == NextActionType.meeting &&
+        result.nextActionDate != null) {
+      await _chainFollowUpMeeting(result.nextActionDate!, user);
+    }
+  }
+
+  // ── Meeting ──────────────────────────────────────────────────────
+  // Meet tile opens a chooser: schedule-new or log-past — same pattern
+  // as Call. Schedule-new opens the meeting create form; log-past goes
+  // straight to the activity log sheet preselected to meeting.
+
+  Future<void> _onMeetTap() async {
+    final lead = _lead;
+    if (lead == null) return;
+
+    // TL view → "Meet now / View logged meetings". No log path.
+    if (_isTlView) {
+      final loggedMeetings =
+          await _activityRepo.getActivitiesForLead(lead.id);
+      final mtgCount = loggedMeetings
+          .where((a) => a.type == ActivityType.meeting)
+          .length;
+      if (!mounted) return;
+      final choice = await TlMeetingChooserSheet.show(
+        context,
+        leadName: lead.fullName,
+        loggedMeetingCount: mtgCount,
+      );
+      if (!mounted || choice == null) return;
+      switch (choice) {
+        case TlMeetingChoice.meetNow:
+          showCompassSnack(context,
+              message:
+                  'Opening meeting (production: video link / calendar invite)',
+              type: CompassSnackType.success);
+          break;
+        case TlMeetingChoice.viewLogs:
+          await MeetingLogsViewerSheet.show(
+            context,
+            leadName: lead.fullName,
+            activities: loggedMeetings,
+          );
+          break;
+      }
+      return;
+    }
+
+    // Default RM flow.
+    final choice = await MeetingActionChooserSheet.show(
+      context,
+      leadName: lead.fullName,
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case MeetingChoice.scheduleNew:
+        await _openMeetingCreate();
+        break;
+      case MeetingChoice.logPast:
+        await _onLogPastMeeting();
+        break;
+    }
+  }
+
+  /// Note tile handler. RM logs a note (creates activity entry).
+  /// TL view → opens read-only sheet with the RM's notes (no add path,
+  /// since notes ARE log entries and TL can't log on the RM's behalf).
+  Future<void> _onNoteTap() async {
+    final lead = _lead;
+    if (lead == null) return;
+    if (_isTlView) {
+      final activities = await _activityRepo.getActivitiesForLead(lead.id);
+      if (!mounted) return;
+      await NoteLogsViewerSheet.show(
+        context,
+        leadName: lead.fullName,
+        activities: activities,
+      );
+      return;
+    }
+    await _logActivity(ActivityType.note);
+  }
+
+  /// "Log a past meeting" path. Shows the scheduled-meetings picker so
+  /// the RM can pick which meeting they're logging against. Three
+  /// outcomes:
+  ///   - Pick a scheduled meeting → log against it (state transition,
+  ///     no duplicate record).
+  ///   - Cancel a scheduled meeting → mark it cancelled, no log entry.
+  ///   - "It wasn't a scheduled meeting" → fall back to creating a fresh
+  ///     log entry (walk-in / ad-hoc).
+  Future<void> _onLogPastMeeting() async {
+    final lead = _lead;
+    if (lead == null) return;
+    final activities = await _activityRepo.getActivitiesForLead(lead.id);
+    final scheduled = selectScheduledMeetings(activities);
+    if (!mounted) return;
+
+    final result = await MeetingPickerSheet.show(
+      context,
+      leadName: lead.fullName,
+      scheduledMeetings: scheduled,
+    );
+    if (!mounted || result == null) return;
+
+    if (result is MeetingPickAdHoc) {
+      // Walk-in / ad-hoc — create a fresh entry like the original flow.
+      await _logActivity(ActivityType.meeting);
+      return;
+    }
+
+    if (result is MeetingPickCancel) {
+      final title = (result.meeting.notes ?? 'Meeting')
+          .split('\n')
+          .first
+          .trim();
+      final confirmed = await showCancelMeetingConfirm(
+        context,
+        meetingTitle: title.isEmpty ? 'Meeting' : title,
+      );
+      if (!confirmed || !mounted) return;
+      await _activityRepo.updateActivity(
+        activityId: result.meeting.id,
+        leadId: lead.id,
+        outcome: ActivityOutcome.cancelled,
+      );
+      if (mounted) {
+        showCompassSnack(context,
+            message: 'Meeting cancelled', type: CompassSnackType.warn);
+        await _load();
+      }
+      return;
+    }
+
+    if (result is MeetingPickLog) {
+      await _logAgainstScheduledMeeting(result.meeting);
+      return;
+    }
+  }
+
+  /// Logs against an existing scheduled meeting. Opens the standard log
+  /// sheet with the meeting's title in the header, captures outcome /
+  /// notes / duration, and updates the existing activity record (no
+  /// duplicate). Persists next-action and chains a follow-up meeting if
+  /// the RM picked Meeting as next-action.
+  Future<void> _logAgainstScheduledMeeting(ActivityModel scheduled) async {
+    final lead = _lead;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (lead == null || user == null) return;
+
+    await ActivityQuickLogSheet.show(
+      context,
+      leadId: lead.id,
+      // Header line tells the RM exactly which meeting they're logging.
+      leadName: formatMeetingContext(scheduled),
+      preselectedType: ActivityType.meeting,
+      onSave: (type, notes, outcome, duration, nextActionType, nextActionDate) async {
+        // Combine the original meeting's notes (title / mode / link)
+        // with the held-meeting notes the RM just typed, separated by
+        // a divider so both are readable in the timeline.
+        final combinedNotes = StringBuffer();
+        if ((scheduled.notes ?? '').isNotEmpty) {
+          combinedNotes.write(scheduled.notes);
+          combinedNotes.write('\n— Logged: ');
+        }
+        combinedNotes.write(notes ?? '');
+
+        await _activityRepo.updateActivity(
+          activityId: scheduled.id,
+          leadId: lead.id,
+          // Keep the originally scheduled date — that's the meeting's
+          // historical anchor. The held-meeting log doesn't move it.
+          durationMinutes: duration,
+          notes: combinedNotes.toString().trim(),
+          outcome: outcome ?? ActivityOutcome.completed,
+        );
+        await _persistNextAction(nextActionType, nextActionDate);
+
+        if (mounted) {
+          showCompassSnack(context,
+              message: 'Meeting logged',
+              type: CompassSnackType.success);
+        }
+        await _load();
+        if (mounted &&
+            nextActionType == NextActionType.meeting &&
+            nextActionDate != null) {
+          await _chainFollowUpMeeting(nextActionDate, user);
+        }
+      },
+    );
+  }
+
+  /// Opens the meeting create form. On save, logs the meeting as an
+  /// activity (future date → followUp outcome / scheduled, past date →
+  /// completed / logged), persists the next action, and chains another
+  /// follow-up meeting when next-action is Meeting.
+  Future<void> _openMeetingCreate() async {
+    final lead = _lead;
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (lead == null || user == null) return;
+
+    final result = await MeetingCreateSheet.show(
+      context,
+      leadName: lead.fullName,
+    );
+    if (!mounted || result == null) return;
+
+    final isFuture = result.when.isAfter(DateTime.now());
+    final outcome =
+        isFuture ? ActivityOutcome.followUp : ActivityOutcome.completed;
+
+    await _activityRepo.logActivity(
+      leadId: lead.id,
+      type: ActivityType.meeting,
+      dateTime: result.when,
+      durationMinutes: result.durationMinutes,
+      notes: result.toLogNotes(),
+      outcome: outcome,
+      loggedById: user.id,
+      loggedByName: user.name,
+    );
+
+    await _persistNextAction(result.nextActionType, result.nextActionDate);
+
+    if (mounted) {
+      showCompassSnack(
+        context,
+        message: isFuture ? 'Meeting scheduled' : 'Meeting logged',
+        type: CompassSnackType.success,
+      );
+      await _load();
+    }
+    if (mounted &&
+        result.nextActionType == NextActionType.meeting &&
+        result.nextActionDate != null) {
+      await _chainFollowUpMeeting(result.nextActionDate!, user);
     }
   }
 
@@ -400,14 +868,68 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// TL read-only banner — visible at the top of the body when the viewer
+// is a Team Lead looking at a reportee's lead.
+// ────────────────────────────────────────────────────────────────────
+
+class _TlReadOnlyBanner extends StatelessWidget {
+  final String rmName;
+  const _TlReadOnlyBanner({required this.rmName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.warmAmber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border:
+            Border.all(color: AppColors.warmAmber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.visibility_outlined,
+              size: 16, color: AppColors.warmAmber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: const Color(0xFF8A4F00),
+                  fontWeight: FontWeight.w600,
+                ),
+                children: [
+                  const TextSpan(text: 'Read-only · Lead owned by '),
+                  TextSpan(
+                    text: rmName,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Hero header — full identity in the navy block
 // ────────────────────────────────────────────────────────────────────
 
 class _LeadHeroHeader extends StatelessWidget {
   final LeadModel lead;
   final ValueChanged<String> onMenu;
+  /// In TL-view (reportee's lead), the popup menu (Edit / Convert-to-IB)
+  /// is hidden — TL has no state-change rights here.
+  final bool isTlView;
 
-  const _LeadHeroHeader({required this.lead, required this.onMenu});
+  const _LeadHeroHeader({
+    required this.lead,
+    required this.onMenu,
+    this.isTlView = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -427,35 +949,38 @@ class _LeadHeroHeader extends StatelessWidget {
                 splashRadius: 22,
               ),
               const Spacer(),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.white, size: 22),
-                onSelected: onMenu,
-                position: PopupMenuPosition.under,
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.edit_outlined, size: 20),
-                      title: Text('Edit details'),
-                    ),
-                  ),
-                  // Hide Convert-to-IB when this lead is already linked to an IB lead.
-                  if (lead.ibLeadIds.isEmpty)
+              // Popup menu hidden for TL view — Edit / Convert-to-IB are
+              // owner-only actions. (Request Reassignment will be added
+              // here in the next iteration.)
+              if (!isTlView)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert,
+                      color: Colors.white, size: 22),
+                  onSelected: onMenu,
+                  position: PopupMenuPosition.under,
+                  itemBuilder: (_) => [
                     const PopupMenuItem(
-                      value: 'ib',
+                      value: 'edit',
                       child: ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.swap_horiz, size: 20),
-                        title: Text('Convert to IB Lead'),
+                        leading: Icon(Icons.edit_outlined, size: 20),
+                        title: Text('Edit details'),
                       ),
                     ),
-                  // Drop lead is now in the bottom action bar — duplicate
-                  // menu entry removed so there's a single source of truth.
-                ],
-              ),
+                    // Hide Convert-to-IB when this lead is already linked.
+                    if (lead.ibLeadIds.isEmpty)
+                      const PopupMenuItem(
+                        value: 'ib',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.swap_horiz, size: 20),
+                          title: Text('Convert to IB Lead'),
+                        ),
+                      ),
+                  ],
+                ),
             ],
           ),
           Padding(

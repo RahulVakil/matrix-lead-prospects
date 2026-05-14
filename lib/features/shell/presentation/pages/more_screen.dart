@@ -33,46 +33,98 @@ class MoreScreen extends StatelessWidget {
   }
 
   List<Widget> _tilesForRole(BuildContext context, UserRole role) {
+    // Wealth-CRM module: a single "Leads" tile that lands on the Leads
+    // Dashboard. From the dashboard's FAB, the RM accesses New Lead /
+    // Get Lead / IB Lead. No more split lead-related tiles in More.
     switch (role) {
       case UserRole.rm:
         return [
-          _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.person_add_alt_1, label: 'New lead', onTap: () => context.push('/leads/new')),
-          _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.move_to_inbox_outlined, label: 'Get lead', onTap: () => context.push('/get-lead')),
-          _GridTile(icon: Icons.notifications_outlined, label: 'Notifications', onTap: () => context.push('/notifications')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
+          _GridTile(
+            icon: Icons.people_alt_outlined,
+            label: 'Leads',
+            onTap: () => context.push('/leads-dashboard'),
+          ),
+          _GridTile(
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            onTap: () => context.push('/notifications'),
+          ),
+          _GridTile(
+            icon: Icons.swap_horiz,
+            label: 'Switch role',
+            onTap: () => _showRoleSwitcher(context),
+          ),
         ];
       case UserRole.teamLead:
+        // For a TL, "Leads" in More opens the team dashboard (the
+        // aggregate view across all reportees + self). The TL's OWN pool
+        // is reached from the home Leads card / the self-tile inside the
+        // team dashboard — they don't need a separate More entry.
         return [
-          _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.person_add_alt_1, label: 'New lead', onTap: () => context.push('/leads/new')),
-          _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.fact_check_outlined, label: 'IB status', onTap: () => context.push('/ib-leads')),
-          // TL gets Get Lead tile so they can see their team's request
-          // history + audit trail of admin assignments.
-          _GridTile(icon: Icons.move_to_inbox_outlined, label: 'Get lead', onTap: () => context.push('/get-lead')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
+          _GridTile(
+            icon: Icons.people_alt_outlined,
+            label: 'Leads',
+            onTap: () => context.push('/my-team'),
+          ),
+          _GridTile(
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            onTap: () => context.push('/notifications'),
+          ),
+          _GridTile(
+            icon: Icons.swap_horiz,
+            label: 'Switch role',
+            onTap: () => _showRoleSwitcher(context),
+          ),
         ];
       case UserRole.admin:
         return [
-          _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.inventory_outlined, label: 'Manage pool', onTap: () => context.push('/admin/manage-pool')),
-          _GridTile(icon: Icons.dashboard_outlined, label: 'Lead dashboard', onTap: () => context.push('/tl/dashboard')),
-          _GridTile(icon: Icons.fact_check_outlined, label: 'IB approvals', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
+          _GridTile(
+            icon: Icons.people_alt_outlined,
+            label: 'Leads',
+            onTap: () => context.push('/leads-dashboard'),
+          ),
+          _GridTile(
+            icon: Icons.inventory_outlined,
+            label: 'Manage pool',
+            onTap: () => context.push('/admin/manage-pool'),
+          ),
+          _GridTile(
+            icon: Icons.swap_horiz,
+            label: 'Switch role',
+            onTap: () => _showRoleSwitcher(context),
+          ),
         ];
       case UserRole.ib:
-        // IB-1: IB Approval module hidden for IB role. They only see their leads.
         return [
-          _GridTile(icon: Icons.business_center_outlined, label: 'IB leads', onTap: () => context.push('/ib-leads')),
-          _GridTile(icon: Icons.notifications_outlined, label: 'Notifications', onTap: () => context.push('/notifications')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
+          _GridTile(
+            icon: Icons.business_center_outlined,
+            label: 'IB leads',
+            onTap: () => context.push('/ib-leads'),
+          ),
+          _GridTile(
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            onTap: () => context.push('/notifications'),
+          ),
+          _GridTile(
+            icon: Icons.swap_horiz,
+            label: 'Switch role',
+            onTap: () => _showRoleSwitcher(context),
+          ),
         ];
       default:
         return [
-          _GridTile(icon: Icons.people_alt_outlined, label: 'All leads', onTap: () => context.push('/leads')),
-          _GridTile(icon: Icons.swap_horiz, label: 'Switch role', onTap: () => _showRoleSwitcher(context)),
+          _GridTile(
+            icon: Icons.people_alt_outlined,
+            label: 'Leads',
+            onTap: () => context.push('/leads-dashboard'),
+          ),
+          _GridTile(
+            icon: Icons.swap_horiz,
+            label: 'Switch role',
+            onTap: () => _showRoleSwitcher(context),
+          ),
         ];
     }
   }
@@ -84,42 +136,62 @@ class MoreScreen extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Demo — see how the app changes per role.', style: AppTextStyles.bodySmall),
+          Text(
+            'Demo — see how the app changes per role.',
+            style: AppTextStyles.bodySmall,
+          ),
           const SizedBox(height: 14),
-          ...[UserRole.rm, UserRole.teamLead, UserRole.admin, UserRole.ib]
-              .map((role) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.navyPrimary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(8.67),
-                      ),
-                      child: Icon(_iconForRole(role), color: AppColors.navyPrimary, size: 20),
-                    ),
-                    title: Text(role.label, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600)),
-                    onTap: () { Navigator.pop(context); context.read<AuthCubit>().login(role); },
-                  )),
+          ...[UserRole.rm, UserRole.teamLead, UserRole.admin, UserRole.ib].map(
+            (role) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.navyPrimary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8.67),
+                ),
+                child: Icon(
+                  _iconForRole(role),
+                  color: AppColors.navyPrimary,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                role.label,
+                style: AppTextStyles.bodyLarge.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                context.read<AuthCubit>().login(role);
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 
   IconData _iconForRole(UserRole role) => switch (role) {
-        UserRole.rm => Icons.person_outline,
-        UserRole.teamLead => Icons.groups_outlined,
-        UserRole.admin => Icons.admin_panel_settings_outlined,
-        UserRole.ib => Icons.business_center_outlined,
-        _ => Icons.person_outline,
-      };
+    UserRole.rm => Icons.person_outline,
+    UserRole.teamLead => Icons.groups_outlined,
+    UserRole.admin => Icons.admin_panel_settings_outlined,
+    UserRole.ib => Icons.business_center_outlined,
+    _ => Icons.person_outline,
+  };
 }
 
 class _GridTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Color? color;
-  const _GridTile({required this.icon, required this.label, required this.onTap, this.color});
+  const _GridTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -130,16 +202,28 @@ class _GridTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 73, height: 73,
+            width: 73,
+            height: 73,
             decoration: ShapeDecoration(
               color: const Color(0xFFF7F8FF),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.67)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.67),
+              ),
             ),
-            child: Icon(icon, size: 28, color: color ?? AppColors.navyPrimary),
+            child: Icon(icon, size: 28, color: AppColors.navyPrimary),
           ),
           const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF41414E))),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF41414E),
+            ),
+          ),
         ],
       ),
     );
@@ -153,7 +237,8 @@ class _MoreHeader extends StatelessWidget {
 
   String get _initials {
     final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    if (parts.length >= 2)
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
@@ -167,9 +252,21 @@ class _MoreHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 52, height: 52,
-            decoration: const BoxDecoration(color: Color(0xFFDBEAFE), shape: BoxShape.circle),
-            child: Center(child: Text(_initials, style: AppTextStyles.heading3.copyWith(color: AppColors.navyPrimary, fontWeight: FontWeight.w700))),
+            width: 52,
+            height: 52,
+            decoration: const BoxDecoration(
+              color: Color(0xFFDBEAFE),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                _initials,
+                style: AppTextStyles.heading3.copyWith(
+                  color: AppColors.navyPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -177,9 +274,21 @@ class _MoreHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(name, style: AppTextStyles.heading3.copyWith(color: Colors.white, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                Text(
+                  name,
+                  style: AppTextStyles.heading3.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text(role.label, style: AppTextStyles.bodySmall.copyWith(color: Colors.white.withValues(alpha: 0.65))),
+                Text(
+                  role.label,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white.withValues(alpha: 0.65),
+                  ),
+                ),
               ],
             ),
           ),

@@ -25,6 +25,24 @@ class MockIbLeadRepository implements IbLeadRepository {
         KeyContactModel(name: 'Rajesh Mehta', designation: 'Promoter & MD', mobile: '+91 98765 43210', email: 'rajesh@mehta-ind.com'),
       ],
       industry: IbIndustry.manufacturing,
+      websiteUrl: 'https://mehta-industries.in',
+      financialDocs: [
+        IbFinancialDoc(
+          id: 'DOC_A1',
+          fileName: 'Mehta_Industries_AnnualReport_FY24.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 2350000,
+          uploadedAt: now.subtract(const Duration(days: 5)),
+        ),
+        IbFinancialDoc(
+          id: 'DOC_A2',
+          fileName: 'Mehta_FinancialSummary_FY24.xlsx',
+          mimeType:
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          sizeBytes: 580000,
+          uploadedAt: now.subtract(const Duration(days: 5)),
+        ),
+      ],
       dealType: IbDealType.ma,
       dealValue: 1500000000,
       dealValueRange: IbDealValueRange.range100To500Cr,
@@ -61,6 +79,38 @@ class MockIbLeadRepository implements IbLeadRepository {
         KeyContactModel(name: 'Meera Bajaj', designation: 'CFO', mobile: '+91 98210 55555', email: 'meera@bajaj-auto.com'),
       ],
       industry: IbIndustry.auto,
+      websiteUrl: 'https://bajaj-auto-components.com',
+      financialDocs: [
+        IbFinancialDoc(
+          id: 'DOC_C1',
+          fileName: 'Bajaj_Auto_AnnualReport_FY24.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 4200000,
+          uploadedAt: now.subtract(const Duration(days: 3)),
+        ),
+        IbFinancialDoc(
+          id: 'DOC_C2',
+          fileName: 'Bajaj_AuditedStatements_FY24.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 3100000,
+          uploadedAt: now.subtract(const Duration(days: 3)),
+        ),
+        IbFinancialDoc(
+          id: 'DOC_C3',
+          fileName: 'Bajaj_InvestorDeck.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 1900000,
+          uploadedAt: now.subtract(const Duration(days: 3)),
+        ),
+        IbFinancialDoc(
+          id: 'DOC_C4',
+          fileName: 'Bajaj_CapTable.xlsx',
+          mimeType:
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          sizeBytes: 320000,
+          uploadedAt: now.subtract(const Duration(days: 3)),
+        ),
+      ],
       dealType: IbDealType.ecm,
       dealValue: 5000000000,
       dealValueRange: IbDealValueRange.above500Cr,
@@ -218,40 +268,6 @@ class MockIbLeadRepository implements IbLeadRepository {
       decidedAt: now.subtract(const Duration(days: 4)),
     ));
 
-    // ── Scenario L — TL-created IB leads (TL-2 "My Lead" badge demo)
-    // These are created by TL001 (Vikram Shah) so they show "My Lead" badge.
-    _put(IbLeadModel(
-      id: 'IBL_L1',
-      companyName: 'Shah Textiles Pvt Ltd',
-      contacts: const [KeyContactModel(name: 'Dinesh Shah', designation: 'Promoter', mobile: '+91 98210 99999', email: 'dinesh@shahtextiles.in')],
-      industry: IbIndustry.fmcg,
-      dealType: IbDealType.ma,
-      dealValue: 900000000,
-      dealValueRange: IbDealValueRange.range100To500Cr,
-      dealStage: IbDealStage.earlyExploration,
-      timelineMonths: 8,
-      notes: 'TL-initiated lead — textile consolidation play.',
-      status: IbLeadStatus.pending,
-      createdById: 'TL001',
-      createdByName: 'Vikram Shah',
-      createdAt: now.subtract(const Duration(days: 2)),
-      submittedAt: now.subtract(const Duration(days: 2)),
-    ));
-    _put(IbLeadModel(
-      id: 'IBL_L2',
-      companyName: 'Pune Chemical Works',
-      contacts: const [KeyContactModel(name: 'Rajiv Kulkarni', designation: 'MD', mobile: '+91 98230 11111', email: 'rajiv@pcw.com')],
-      industry: IbIndustry.manufacturing,
-      dealType: IbDealType.privateEquity,
-      dealValue: 600000000,
-      dealValueRange: IbDealValueRange.range100To500Cr,
-      timelineMonths: 6,
-      status: IbLeadStatus.pending,
-      createdById: 'TL001',
-      createdByName: 'Vikram Shah',
-      createdAt: now.subtract(const Duration(days: 1)),
-      submittedAt: now.subtract(const Duration(days: 1)),
-    ));
   }
 
   void _put(IbLeadModel lead) => _store[lead.id] = lead;
@@ -340,6 +356,26 @@ class MockIbLeadRepository implements IbLeadRepository {
     final lead = _store[id]!;
     final updated = lead.copyWith(
       status: IbLeadStatus.sentBack,
+      branchHeadId: branchHeadId,
+      branchHeadName: branchHeadName,
+      remarks: remarks,
+      decidedAt: DateTime.now(),
+    );
+    _put(updated);
+    return updated;
+  }
+
+  @override
+  Future<IbLeadModel> drop(
+    String id, {
+    required String branchHeadId,
+    required String branchHeadName,
+    required String remarks,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    final lead = _store[id]!;
+    final updated = lead.copyWith(
+      status: IbLeadStatus.dropped,
       branchHeadId: branchHeadId,
       branchHeadName: branchHeadName,
       remarks: remarks,

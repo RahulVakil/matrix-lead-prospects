@@ -49,18 +49,22 @@ class MockLeadRepository implements LeadRepository {
       createdAt: now.subtract(const Duration(days: 3)),
       updatedAt: now.subtract(const Duration(days: 3)),
     ));
-    // Scenario D — Lead claimed 2 hours ago ("Newly Claimed" badge)
+    // Scenario D — HNI prospect with rich 9-day activity timeline
+    // (call/meeting/note seeds live in MockActivityRepository._seedDemoActivities).
+    // Backdated 25 days so seeded activities don't predate lead creation.
     _leads.insert(0, LeadModel(
       id: 'LEAD_D',
-      fullName: 'Rohit Agarwal',
+      fullName: 'Ajay C',
       phone: '0000000000',
       source: LeadSource.referral,
       stage: LeadStage.lead,
-      assignedRmId: 'RM001',
-      assignedRmName: 'Priya Sharma',
+      // Owner aligned with the My Team reportee tile (R-101 / Aanya Khanna)
+      // so TL → reportee → lead → View Logs lands on this lead.
+      assignedRmId: 'R-101',
+      assignedRmName: 'Aanya Khanna',
       vertical: 'PWG',
-      createdAt: now.subtract(const Duration(hours: 2)),
-      updatedAt: now.subtract(const Duration(hours: 2)),
+      createdAt: now.subtract(const Duration(days: 25)),
+      updatedAt: now.subtract(const Duration(hours: 6)),
     ));
     // Scenario L — TL-created wealth leads (shows "My Lead" badge for TL001)
     for (var i = 0; i < 3; i++) {

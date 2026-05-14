@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
@@ -67,6 +67,8 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
   final _emailCtrl = TextEditingController();
   final _phoneFocus = FocusNode();
   final _emailFocus = FocusNode();
+  // Country code for the mobile number — defaults to India.
+  _CountryCode _countryCode = _kCountryCodes.first;
 
   // Source
   LeadSource? _source;
@@ -76,22 +78,9 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 
   // State
   bool _saving = false;
-  bool _checkingCoverage = false;
-  CoverageCheckResult? _coverage;
-  Timer? _coverageDebounce;
-
-  @override
-  void initState() {
-    super.initState();
-    _phoneFocus.addListener(_onPhoneBlur);
-    _emailFocus.addListener(_onEmailBlur);
-  }
 
   @override
   void dispose() {
-    _coverageDebounce?.cancel();
-    _phoneFocus.removeListener(_onPhoneBlur);
-    _emailFocus.removeListener(_onEmailBlur);
     _phoneFocus.dispose();
     _emailFocus.dispose();
     _entityTypeOtherCtrl.dispose();
@@ -121,102 +110,106 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
   }
 
   // ── Coverage ──────────────────────────────────────────────────────
+  // Coverage runs ONLY when the RM taps Save Lead. No inline checks
+  // while typing — RMs found the early badges confusing. On Save, we
+  // either save (clear) or block + show the de-dupe sheet with two
+  // options: Request reassignment, or Cancel.
 
-  void _onPhoneBlur() {
-    if (_phoneFocus.hasFocus) return;
-    if (_phoneCtrl.text.trim().length >= 10) _runCoverage();
+  /// Whether the digits in `_phoneCtrl` form a complete number for the
+  /// currently-selected country code (length within range + leading digit
+  /// regex, if any). Used to gate the coverage payload and validator.
+  bool _isPhoneComplete() {
+    final digits = _phoneCtrl.text.trim();
+    if (digits.length < _countryCode.minDigits ||
+        digits.length > _countryCode.maxDigits) {
+      return false;
+    }
+    final lead = _countryCode.leadingDigits;
+    if (lead != null && !lead.hasMatch(digits)) return false;
+    return true;
   }
 
-  void _onEmailBlur() {
-    if (_emailFocus.hasFocus) return;
-    if (_emailCtrl.text.trim().contains('@')) _runCoverage();
+  String? _validatePhone(String? v) {
+    final digits = (v ?? '').trim();
+    if (digits.isEmpty) return null; // mobile is optional
+    if (digits.length < _countryCode.minDigits) {
+      return _countryCode.minDigits == _countryCode.maxDigits
+          ? 'Enter ${_countryCode.minDigits} digits'
+          : 'Enter ${_countryCode.minDigits}-${_countryCode.maxDigits} digits';
+    }
+    if (digits.length > _countryCode.maxDigits) {
+      return _countryCode.minDigits == _countryCode.maxDigits
+          ? 'Enter ${_countryCode.minDigits} digits'
+          : 'Enter ${_countryCode.minDigits}-${_countryCode.maxDigits} digits';
+    }
+    final lead = _countryCode.leadingDigits;
+    if (lead != null && !lead.hasMatch(digits)) {
+      return _countryCode.leadingHint ?? 'Invalid mobile number';
+    }
+    return null;
   }
 
-  void _onTriggerFieldChanged(String _) {
-    _coverageDebounce?.cancel();
-    _coverageDebounce = Timer(const Duration(milliseconds: 600), () {
-      final hasName = _computedName.length >= 3;
-      final hasCompany = _companyNameCtrl.text.trim().length >= 3;
-      final hasEmail = _emailCtrl.text.trim().contains('@');
-      if (hasName || hasCompany || hasEmail) _runCoverage();
-    });
-  }
-
-  Future<void> _runCoverage() async {
+  /// Runs coverage as a single check at Save time. Returns:
+  ///   - the result if it's clear (caller proceeds with save), OR
+  ///   - null if the RM hit a de-dupe and chose Request reassignment /
+  ///     Cancel from the result sheet (caller stops the save).
+  ///
+  /// On request-reassignment, the request is created here and the screen
+  /// is popped. On cancel, the screen is popped. So a non-null return
+  /// always means "caller should proceed with the save".
+  Future<CoverageCheckResult?> _runCoverageOnSave() async {
     final name = _computedName;
     final phone = _phoneCtrl.text.trim();
     final email = _emailCtrl.text.trim();
     final company = _companyNameCtrl.text.trim();
-    if (name.isEmpty && phone.isEmpty && email.isEmpty && company.isEmpty) {
-      return;
-    }
-
-    // Vertical is derived from the logged-in RM's user profile (no form
-    // selector). EWG uses Name/Email/Mobile match composition; PWG also
-    // includes Company. The mock data restricts matches to Wealth Spectrum
-    // (CoverageSource.clientMaster) regardless of vertical.
     final user = context.read<AuthCubit>().state.currentUser;
 
-    setState(() => _checkingCoverage = true);
     final result = await getIt<CoverageRepository>().checkCoverage(
       name: name.isEmpty ? null : name,
-      phone: phone.length >= 10 ? phone : null,
+      phone: _isPhoneComplete() ? phone : null,
       email: email.contains('@') ? email : null,
       company: company.isEmpty ? null : company,
       groupName: company.isEmpty ? null : company,
       vertical: user?.vertical,
     );
-    if (!mounted) return;
-    setState(() {
-      _coverage = result;
-      _checkingCoverage = false;
-    });
-    if (!result.canProceed) {
-      final decision = await showCoverageResultSheet(context, result);
-      if (!mounted || decision == null) return;
-      if (decision == CoverageDecision.cancel ||
-          decision == CoverageDecision.requestReassignment) {
-        // Persist the reassignment request so Admin/MIS can act on it
-        // from the Manage Pool → REASSIGNMENT tab. The matched record on
-        // the result tells us who currently owns the client.
-        if (decision == CoverageDecision.requestReassignment &&
-            user != null &&
-            result.matchedRecord != null) {
-          final matched = result.matchedRecord!;
-          await getIt<ReassignmentRepository>().create(
-            ReassignmentRequest(
-              id: 'RR_${DateTime.now().millisecondsSinceEpoch}',
-              matchedClientId: matched.id,
-              matchedClientName: matched.clientName,
-              sourceRmId: user.id,
-              sourceRmName: user.name,
-              targetRmId: matched.rmId,
-              targetRmName: matched.rmName,
-              reason:
-                  'Coverage match — ${user.name} requesting reassignment of ${matched.clientName}',
-              createdAt: DateTime.now(),
-            ),
-          );
-        }
-        if (mounted) {
-          showCompassSnack(
-            context,
-            message: decision == CoverageDecision.requestReassignment
-                ? 'Reassignment request submitted to Admin'
-                : 'Cancelled',
-          );
-          context.pop();
-        }
+
+    if (result.canProceed) return result;
+
+    if (!mounted) return null;
+    final decision = await showCoverageResultSheet(context, result);
+    if (!mounted) return null;
+
+    if (decision == CoverageDecision.requestReassignment &&
+        user != null &&
+        result.matchedRecord != null) {
+      final matched = result.matchedRecord!;
+      await getIt<ReassignmentRepository>().create(
+        ReassignmentRequest(
+          id: 'RR_${DateTime.now().millisecondsSinceEpoch}',
+          matchedClientId: matched.id,
+          matchedClientName: matched.clientName,
+          sourceRmId: user.id,
+          sourceRmName: user.name,
+          targetRmId: matched.rmId,
+          targetRmName: matched.rmName,
+          reason:
+              'Coverage match — ${user.name} requesting reassignment of ${matched.clientName}',
+          createdAt: DateTime.now(),
+        ),
+      );
+      if (mounted) {
+        showCompassSnack(context,
+            message: 'Reassignment request submitted to Admin',
+            type: CompassSnackType.success);
+        context.pop();
       }
+    } else if (decision == CoverageDecision.cancel || decision == null) {
+      // Stay on the form so the RM can edit the entry; no toast spam.
     }
+    return null;
   }
 
   // ── Save ───────────────────────────────────────────────────────────
-
-  /// Hard block: both existingClient AND duplicateLead block submit.
-  bool get _isDuplicate =>
-      _coverage?.status == CoverageStatus.existingClient ||
-      _coverage?.status == CoverageStatus.duplicateLead;
 
   /// Validation rules:
   ///   - Name (computed for individual / entity name for non-individual) required.
@@ -227,7 +220,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
   bool get _canSave {
     if (_computedName.isEmpty) return false;
     if (_source == null) return false;
-    if (_isDuplicate) return false;
     if (_entityType == LeadEntityType.others &&
         _entityTypeOtherCtrl.text.trim().isEmpty) {
       return false;
@@ -252,6 +244,18 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
     if (user == null) return;
 
     setState(() => _saving = true);
+
+    // Single coverage check at Save time. Clear → proceed. Hit → the
+    // helper shows the de-dupe sheet and either creates a reassignment
+    // request (and pops the screen) or returns null so we abort the save
+    // and let the RM edit.
+    final coverageResult = await _runCoverageOnSave();
+    if (!mounted) return;
+    if (coverageResult == null) {
+      setState(() => _saving = false);
+      return;
+    }
+
     final now = DateTime.now();
     final leadId = 'LEAD_${now.millisecondsSinceEpoch}';
     // Auto-granted consent record so retention banner / data export keep
@@ -267,7 +271,10 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       purposeStatement: DataConsentType.leadCapture.purposeStatement,
     );
 
-    final phone = _phoneCtrl.text.trim();
+    final phoneDigits = _phoneCtrl.text.trim();
+    final phone = phoneDigits.isEmpty
+        ? ''
+        : '${_countryCode.dialCode} $phoneDigits';
     final email = _emailCtrl.text.trim();
     final company = _companyNameCtrl.text.trim();
 
@@ -336,34 +343,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_isDuplicate)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorRed.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: AppColors.errorRed.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.block,
-                          size: 16, color: AppColors.errorRed),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Duplicate found — this lead already exists. Contact your TL to proceed.',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.errorRed,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               CompassButton(
                 label: 'Save Lead',
                 isLoading: _saving,
@@ -392,7 +371,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                   .toList(),
               onChanged: (v) => setState(() {
                 _entityType = v ?? LeadEntityType.individual;
-                _coverage = null;
                 if (_entityType.isIndividual) {
                   _keyContacts = const [];
                 }
@@ -422,7 +400,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                 controller: _firstNameCtrl,
                 label: 'First name',
                 isRequired: true,
-                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
@@ -430,14 +407,12 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
               CompassTextField(
                 controller: _middleNameCtrl,
                 label: 'Middle name',
-                onChanged: _onTriggerFieldChanged,
               ),
               const SizedBox(height: 12),
               CompassTextField(
                 controller: _lastNameCtrl,
                 label: 'Last name',
                 isRequired: true,
-                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
@@ -473,7 +448,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
                 controller: _entityNameCtrl,
                 label: 'Entity name',
                 isRequired: true,
-                onChanged: _onTriggerFieldChanged,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
@@ -484,15 +458,6 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
               label: 'Company Name',
               hint: 'Optional — used for coverage / family de-dupe',
               prefixIcon: Icons.business_outlined,
-              onChanged: _onTriggerFieldChanged,
-            ),
-            const SizedBox(height: 8),
-            _CoverageBadge(
-              checking: _checkingCoverage,
-              result: _coverage,
-              onTap: _coverage != null && !_coverage!.canProceed
-                  ? () => showCoverageResultSheet(context, _coverage!)
-                  : null,
             ),
 
             const SizedBox(height: 20),
@@ -500,13 +465,25 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
             // ── Contact (both optional) ──────────────────────────
             const CompassSectionHeader(title: 'Contact'),
             const SizedBox(height: 10),
-            CompassTextField(
+            // Mobile number = country-code dropdown (default India / +91)
+            // + digits-only TextField. Validation length & leading digit are
+            // driven by the selected country code's rules.
+            _MobileWithCountryCode(
+              countryCode: _countryCode,
+              countries: _kCountryCodes,
               controller: _phoneCtrl,
               focusNode: _phoneFocus,
-              label: 'Mobile number',
-              hint: 'Optional',
-              keyboardType: TextInputType.phone,
-              prefixIcon: Icons.phone_outlined,
+              validator: _validatePhone,
+              onCountryChanged: (c) {
+                setState(() {
+                  _countryCode = c;
+                  // Trim digits down to the new country's max length so the
+                  // visible value never violates the new constraint.
+                  if (_phoneCtrl.text.length > c.maxDigits) {
+                    _phoneCtrl.text = _phoneCtrl.text.substring(0, c.maxDigits);
+                  }
+                });
+              },
             ),
             const SizedBox(height: 12),
             CompassTextField(
@@ -561,104 +538,298 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Country code data + mobile-number-with-country-code field.
+// India is intentionally first so it can be the default selection.
 
-class _CoverageBadge extends StatelessWidget {
-  final bool checking;
-  final CoverageCheckResult? result;
-  final VoidCallback? onTap;
+class _CountryCode {
+  final String iso; // ISO-2 e.g. 'IN'
+  final String dialCode; // e.g. '+91'
+  final String name; // e.g. 'India'
+  final String flag; // emoji
+  final int minDigits;
+  final int maxDigits;
+  final RegExp? leadingDigits; // optional first-digit constraint
+  final String? leadingHint; // shown when leadingDigits fails
 
-  const _CoverageBadge({
-    required this.checking,
-    required this.result,
-    this.onTap,
+  const _CountryCode({
+    required this.iso,
+    required this.dialCode,
+    required this.name,
+    required this.flag,
+    required this.minDigits,
+    required this.maxDigits,
+    this.leadingDigits,
+    this.leadingHint,
+  });
+}
+
+// Common country codes for Indian wealth / NRI clients. India first so it
+// is the default. Mobile-number length & leading-digit rules per TRAI /
+// national numbering plans.
+final List<_CountryCode> _kCountryCodes = [
+  _CountryCode(
+    iso: 'IN',
+    dialCode: '+91',
+    name: 'India',
+    flag: '🇮🇳',
+    minDigits: 10,
+    maxDigits: 10,
+    leadingDigits: RegExp(r'^[6-9]'),
+    leadingHint: 'Indian mobile must start with 6, 7, 8 or 9',
+  ),
+  _CountryCode(
+    iso: 'AE',
+    dialCode: '+971',
+    name: 'United Arab Emirates',
+    flag: '🇦🇪',
+    minDigits: 9,
+    maxDigits: 9,
+    leadingDigits: RegExp(r'^5'),
+    leadingHint: 'UAE mobile must start with 5',
+  ),
+  _CountryCode(
+    iso: 'SG',
+    dialCode: '+65',
+    name: 'Singapore',
+    flag: '🇸🇬',
+    minDigits: 8,
+    maxDigits: 8,
+    leadingDigits: RegExp(r'^[89]'),
+    leadingHint: 'Singapore mobile must start with 8 or 9',
+  ),
+  _CountryCode(
+    iso: 'GB',
+    dialCode: '+44',
+    name: 'United Kingdom',
+    flag: '🇬🇧',
+    minDigits: 10,
+    maxDigits: 10,
+    leadingDigits: RegExp(r'^7'),
+    leadingHint: 'UK mobile must start with 7',
+  ),
+  _CountryCode(
+    iso: 'US',
+    dialCode: '+1',
+    name: 'United States',
+    flag: '🇺🇸',
+    minDigits: 10,
+    maxDigits: 10,
+  ),
+  _CountryCode(
+    iso: 'CA',
+    dialCode: '+1',
+    name: 'Canada',
+    flag: '🇨🇦',
+    minDigits: 10,
+    maxDigits: 10,
+  ),
+  _CountryCode(
+    iso: 'AU',
+    dialCode: '+61',
+    name: 'Australia',
+    flag: '🇦🇺',
+    minDigits: 9,
+    maxDigits: 9,
+    leadingDigits: RegExp(r'^4'),
+    leadingHint: 'Australian mobile must start with 4',
+  ),
+  _CountryCode(
+    iso: 'SA',
+    dialCode: '+966',
+    name: 'Saudi Arabia',
+    flag: '🇸🇦',
+    minDigits: 9,
+    maxDigits: 9,
+    leadingDigits: RegExp(r'^5'),
+    leadingHint: 'Saudi mobile must start with 5',
+  ),
+  _CountryCode(
+    iso: 'HK',
+    dialCode: '+852',
+    name: 'Hong Kong',
+    flag: '🇭🇰',
+    minDigits: 8,
+    maxDigits: 8,
+    leadingDigits: RegExp(r'^[569]'),
+    leadingHint: 'Hong Kong mobile must start with 5, 6 or 9',
+  ),
+  _CountryCode(
+    iso: 'CH',
+    dialCode: '+41',
+    name: 'Switzerland',
+    flag: '🇨🇭',
+    minDigits: 9,
+    maxDigits: 9,
+    leadingDigits: RegExp(r'^7'),
+    leadingHint: 'Swiss mobile must start with 7',
+  ),
+];
+
+class _MobileWithCountryCode extends StatelessWidget {
+  final _CountryCode countryCode;
+  final List<_CountryCode> countries;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final FormFieldValidator<String> validator;
+  final ValueChanged<_CountryCode> onCountryChanged;
+
+  const _MobileWithCountryCode({
+    required this.countryCode,
+    required this.countries,
+    required this.controller,
+    required this.focusNode,
+    required this.validator,
+    required this.onCountryChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (checking) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 4),
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RichText(
+          text: TextSpan(
+            text: 'Mobile number',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                color: AppColors.textHint,
+            // Country code dropdown — fixed-width so the phone field gets
+            // the rest of the row. Selected state shows just flag + dial
+            // code; the menu shows full country name for disambiguation.
+            SizedBox(
+              width: 118,
+              child: DropdownButtonFormField<_CountryCode>(
+                initialValue: countryCode,
+                isExpanded: true,
+                menuMaxHeight: 320,
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 16,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        const BorderSide(color: AppColors.borderDefault),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        const BorderSide(color: AppColors.borderDefault),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                        color: AppColors.navyPrimary, width: 1.5),
+                  ),
+                ),
+                style: AppTextStyles.bodyLarge,
+                selectedItemBuilder: (ctx) => countries
+                    .map((c) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${c.flag}  ${c.dialCode}',
+                            style: AppTextStyles.bodyLarge,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ))
+                    .toList(),
+                items: countries
+                    .map(
+                      (c) => DropdownMenuItem<_CountryCode>(
+                        value: c,
+                        child: Row(
+                          children: [
+                            Text(c.flag,
+                                style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                c.name,
+                                style: AppTextStyles.bodyLarge,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(c.dialCode,
+                                style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (c) {
+                  if (c != null) onCountryChanged(c);
+                },
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              'Checking coverage…',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+            Expanded(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(countryCode.maxDigits),
+                  ],
+                  validator: validator,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  style: AppTextStyles.bodyLarge,
+                  decoration: InputDecoration(
+                    hintText: countryCode.minDigits == countryCode.maxDigits
+                        ? '${countryCode.minDigits}-digit mobile (optional)'
+                        : '${countryCode.minDigits}-${countryCode.maxDigits} digits (optional)',
+                    counterText: '',
+                    prefixIcon: const Icon(Icons.phone_outlined,
+                        size: 20, color: AppColors.textSecondary),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 16,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppColors.borderDefault),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppColors.borderDefault),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                          color: AppColors.navyPrimary, width: 1.5),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppColors.errorRedAlt),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                          color: AppColors.errorRedAlt, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
-      );
-    }
-    if (result == null) return const SizedBox.shrink();
-
-    final color = switch (result!.status) {
-      CoverageStatus.clear => AppColors.successGreen,
-      CoverageStatus.existingClient => AppColors.errorRed,
-      CoverageStatus.duplicateLead => AppColors.warmAmber,
-      CoverageStatus.requiresReview => AppColors.tealAccent,
-      CoverageStatus.dnd => AppColors.errorRed,
-    };
-    final icon = switch (result!.status) {
-      CoverageStatus.clear => Icons.check_circle_outline,
-      CoverageStatus.existingClient => Icons.shield,
-      CoverageStatus.duplicateLead => Icons.warning_amber_rounded,
-      CoverageStatus.requiresReview => Icons.search,
-      CoverageStatus.dnd => Icons.do_not_disturb_on_outlined,
-    };
-    final label = switch (result!.status) {
-      CoverageStatus.clear => 'Coverage clear',
-      CoverageStatus.existingClient =>
-        'Already a client of ${result!.existingRmName ?? "another RM"}',
-      CoverageStatus.duplicateLead =>
-        'Duplicate with ${result!.existingRmName ?? "another RM"}',
-      CoverageStatus.requiresReview =>
-        '${result!.alternateMatches.length} possible matches',
-      CoverageStatus.dnd => 'Do not disturb',
-    };
-
-    final familyHint = result!.familyMatch != null
-        ? ' · Family: ${result!.familyMatch!.groupName} (${result!.familyMatch!.memberCount} members)'
-        : '';
-
-    final body = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$label$familyHint',
-              style: AppTextStyles.caption.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (onTap != null)
-            Icon(Icons.chevron_right, size: 14, color: color),
-        ],
-      ),
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: onTap != null
-          ? GestureDetector(onTap: onTap, child: body)
-          : body,
+      ],
     );
   }
 }

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/enums/lead_designation.dart';
+import '../../../../core/enums/lead_entity_type.dart';
 import '../../../../core/enums/lead_stage.dart';
 import '../../../../core/models/admin_action_record.dart';
+import '../../../../core/models/ib_lead_model.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/enums/lead_source.dart';
 import '../../../../core/models/lead_request.dart';
 import '../../../../core/models/reassignment_request.dart';
+import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/repositories/lead_request_repository.dart';
 import '../../../../core/repositories/reassignment_repository.dart';
@@ -15,9 +20,12 @@ import '../../../../core/services/mock/mock_data_generators.dart';
 import '../../../../core/services/mock_notification_queue.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/inr_formatter.dart';
 import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_button.dart';
+import '../../../../core/widgets/compass_dropdown.dart';
 import '../../../../core/widgets/compass_empty_state.dart';
+import '../../../../core/widgets/compass_section_header.dart';
 import '../../../../core/widgets/compass_loader.dart';
 import '../../../../core/widgets/compass_snackbar.dart';
 import '../../../../core/widgets/compass_text_field.dart';
@@ -40,19 +48,21 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
   final _repo = getIt<LeadRepository>();
   final _reassignRepo = getIt<ReassignmentRepository>();
   final _requestRepo = getIt<LeadRequestRepository>();
+  final _ibRepo = getIt<IbLeadRepository>();
   bool _loading = true;
   List<LeadModel> _droppedLeads = [];
   List<LeadModel> _poolLeads = [];
   List<ReassignmentRequest> _reassignments = [];
   List<LeadRequest> _pendingRequests = [];
+  List<IbLeadModel> _pendingIbLeads = [];
   int _poolCount = 0;
   Map<String, int> _breakdown = {};
 
   @override
   void initState() {
     super.initState();
-    // 6 tabs: Pool, Requests, Reassignment, Mapped, Dropped, Upload.
-    _tabCtrl = TabController(length: 6, vsync: this);
+    // 7 tabs: Pool, Requests, Reassign, IB, Mapped, Dropped, Upload.
+    _tabCtrl = TabController(length: 7, vsync: this);
     _load();
   }
 
@@ -64,12 +74,17 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    final user = context.read<AuthCubit>().state.currentUser;
     _droppedLeads = await _repo.getDroppedLeads();
     _poolLeads = await _repo.getPoolLeads();
     _poolCount = _poolLeads.length;
     _breakdown = await _repo.getPoolBreakdown();
     _reassignments = await _reassignRepo.getAllPending();
     _pendingRequests = await _requestRepo.getAllPending();
+    final ibLeads =
+        await _ibRepo.getAllForBranchHead(user?.id ?? 'admin');
+    _pendingIbLeads =
+        ibLeads.where((l) => l.status.isAwaitingReview).toList();
     if (mounted) setState(() => _loading = false);
   }
 
@@ -269,28 +284,114 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
     }
   }
 
-  /// Bulk-assign N pool leads to a single RM. Used by both the multi-select
-  /// picker and the CSV bulk upload flows.
-  Future<void> _bulkAssign(
-      List<String> leadIds, String rmId, String rmName) async {
-    var ok = 0;
-    var fail = 0;
-    for (final id in leadIds) {
-      try {
-        await _repo.claimFromPool(id, rmId, rmName);
-        ok++;
-      } catch (_) {
-        fail++;
-      }
-    }
+  // ── IB lead approvals ──────────────────────────────────────────────
+
+  /// Approve an IB lead from the Manage Pool quick-action row. Marks the
+  /// lead approved and notifies the RM. SPOC assignment + outbound email
+  /// to the IB SPOC live on the full IB lead detail screen — admins who
+  /// want to wire those should tap the card to drill in.
+  Future<void> _approveIbLead(IbLeadModel lead) async {
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Approve IB lead?'),
+        content: Text(
+          '${lead.companyName} · ${lead.dealType.label} will be marked '
+          'Approved and visible to the IB team.\n\n'
+          'Tip: open the lead detail to also assign a SPOC and review the '
+          'outbound email.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Approve')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _ibRepo.approve(lead.id,
+        branchHeadId: user.id, branchHeadName: user.name);
+    MockNotificationQueue.pushInApp(
+      recipientId: lead.createdById,
+      recipientName: lead.createdByName,
+      title: 'IB lead approved',
+      body:
+          'Your IB lead #${lead.id} (${lead.companyName}) has been approved by ${user.name}.',
+      deepLink: '/ib-leads/${lead.id}',
+    );
     if (mounted) {
       showCompassSnack(context,
-          message: fail == 0
-              ? '$ok leads assigned to $rmName'
-              : '$ok assigned · $fail failed',
-          type: fail == 0
-              ? CompassSnackType.success
-              : CompassSnackType.warn);
+          message: 'Approved · ${lead.createdByName} notified',
+          type: CompassSnackType.success);
+      _load();
+    }
+  }
+
+  Future<void> _sendBackIbLead(IbLeadModel lead) async {
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    final remarks = await _promptForReason(
+      context,
+      title: 'Send back to ${lead.createdByName}',
+      hint: 'Remarks for the RM (e.g. missing financials)',
+      confirmLabel: 'Send back',
+      body:
+          'The RM will receive your remarks and can edit + resubmit the lead.',
+    );
+    if (remarks == null || !mounted) return;
+    await _ibRepo.sendBack(lead.id,
+        branchHeadId: user.id,
+        branchHeadName: user.name,
+        remarks: remarks);
+    MockNotificationQueue.pushInApp(
+      recipientId: lead.createdById,
+      recipientName: lead.createdByName,
+      title: 'IB lead sent back',
+      body:
+          'Your IB lead #${lead.id} (${lead.companyName}) was sent back. Remarks: $remarks',
+      deepLink: '/ib-leads/${lead.id}',
+    );
+    if (mounted) {
+      showCompassSnack(context,
+          message: 'Sent back · ${lead.createdByName} notified',
+          type: CompassSnackType.warn);
+      _load();
+    }
+  }
+
+  Future<void> _dropIbLead(IbLeadModel lead) async {
+    final user = context.read<AuthCubit>().state.currentUser;
+    if (user == null) return;
+    final remarks = await _promptForReason(
+      context,
+      title: 'Drop IB lead?',
+      hint: 'Reason for dropping (audit trail)',
+      confirmLabel: 'Drop',
+      body:
+          'Dropping is terminal. The RM will be notified with your reason and the lead will not move forward.',
+    );
+    if (remarks == null || !mounted) return;
+    await _ibRepo.drop(lead.id,
+        branchHeadId: user.id,
+        branchHeadName: user.name,
+        remarks: remarks);
+    MockNotificationQueue.pushInApp(
+      recipientId: lead.createdById,
+      recipientName: lead.createdByName,
+      title: 'IB lead dropped',
+      body:
+          'Your IB lead #${lead.id} (${lead.companyName}) was dropped. Reason: $remarks',
+      deepLink: '/ib-leads/${lead.id}',
+    );
+    if (mounted) {
+      showCompassSnack(context,
+          message: 'Dropped · ${lead.createdByName} notified',
+          type: CompassSnackType.warn);
       _load();
     }
   }
@@ -353,6 +454,7 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                       Tab(text: 'POOL (${_poolLeads.length})'),
                       Tab(text: 'REQUESTS (${_pendingRequests.length})'),
                       Tab(text: 'REASSIGN (${_reassignments.length})'),
+                      Tab(text: 'IB (${_pendingIbLeads.length})'),
                       const Tab(text: 'MAPPED'),
                       Tab(text: 'DROPPED (${_droppedLeads.length})'),
                       const Tab(text: 'UPLOAD'),
@@ -373,6 +475,16 @@ class _ManagePoolScreenState extends State<ManagePoolScreen>
                         requests: _reassignments,
                         onApprove: _approveReassignment,
                         onReject: _rejectReassignment,
+                      ),
+                      _IbApprovalsTab(
+                        pending: _pendingIbLeads,
+                        onApprove: _approveIbLead,
+                        onSendBack: _sendBackIbLead,
+                        onDrop: _dropIbLead,
+                        onTap: (lead) async {
+                          await context.push('/ib-leads/${lead.id}');
+                          _load();
+                        },
                       ),
                       _MappedLeadsTab(onReturnToPool: (lead) async {
                         await _repo.returnDroppedToPool(lead.id);
@@ -1015,27 +1127,34 @@ class _ReassignmentTab extends StatelessWidget {
   }
 }
 
-// Reassignment-rejection reason prompt.
-Future<String?> _promptForReason(BuildContext context) async {
+/// Reusable mandatory-reason prompt. Defaults map to the original
+/// reassignment-rejection flow so existing callers don't break.
+Future<String?> _promptForReason(
+  BuildContext context, {
+  String title = 'Reject reassignment',
+  String body =
+      'A reason is required so the requesting RM understands the decision.',
+  String hint = 'Enter rejection reason',
+  String confirmLabel = 'Reject',
+}) async {
   final ctrl = TextEditingController();
   final result = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Reject reassignment'),
+      title: Text(title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-              'A reason is required so the requesting RM understands the decision.'),
+          Text(body),
           const SizedBox(height: 12),
           TextField(
             controller: ctrl,
             maxLines: 3,
             minLines: 2,
             maxLength: 200,
-            decoration: const InputDecoration(
-              hintText: 'Enter rejection reason',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: hint,
+              border: const OutlineInputBorder(),
             ),
           ),
         ],
@@ -1050,13 +1169,165 @@ Future<String?> _promptForReason(BuildContext context) async {
             if (v.isEmpty) return;
             Navigator.pop(ctx, v);
           },
-          child: const Text('Reject'),
+          child: Text(confirmLabel),
         ),
       ],
     ),
   );
   ctrl.dispose();
   return result;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Tab: IB Approvals — admin reviews IB leads RMs have submitted
+// ────────────────────────────────────────────────────────────────────
+
+class _IbApprovalsTab extends StatelessWidget {
+  final List<IbLeadModel> pending;
+  final Future<void> Function(IbLeadModel) onApprove;
+  final Future<void> Function(IbLeadModel) onSendBack;
+  final Future<void> Function(IbLeadModel) onDrop;
+  final void Function(IbLeadModel) onTap;
+
+  const _IbApprovalsTab({
+    required this.pending,
+    required this.onApprove,
+    required this.onSendBack,
+    required this.onDrop,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (pending.isEmpty) {
+      return const CompassEmptyState(
+        icon: Icons.business_center_outlined,
+        title: 'No IB leads awaiting approval',
+        subtitle:
+            'When an RM submits an IB lead it lands here for Admin review.',
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: pending.length,
+      itemBuilder: (_, i) {
+        final l = pending[i];
+        final dealSize = l.dealValue != null
+            ? IndianCurrencyFormatter.shortForm(l.dealValue!)
+            : l.dealValueRange.label;
+        final submitted = l.submittedAt ?? l.createdAt;
+        final daysOld = DateTime.now().difference(submitted).inDays;
+        final ageStr = daysOld <= 0
+            ? '${DateTime.now().difference(submitted).inHours}h ago'
+            : '${daysOld}d ago';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => onTap(l),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppColors.warmAmber.withValues(alpha: 0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l.companyName,
+                            style: AppTextStyles.labelLarge
+                                .copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.warmAmber.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Lead Created',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.warmAmber,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.business_center_outlined,
+                            size: 14, color: AppColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${l.dealType.label} · $dealSize'
+                            '${l.dealStage != null ? " · ${l.dealStage!.label}" : ""}',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Submitted by ${l.createdByName} · $ageStr',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textHint),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CompassButton.secondary(
+                            label: 'Drop',
+                            icon: Icons.block,
+                            onPressed: () => onDrop(l),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: CompassButton.secondary(
+                            label: 'Send back',
+                            icon: Icons.undo,
+                            onPressed: () => onSendBack(l),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: CompassButton(
+                            label: 'Approve',
+                            icon: Icons.check,
+                            onPressed: () => onApprove(l),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1545,6 +1816,13 @@ class _UploadPoolTabState extends State<_UploadPoolTab> {
 
 // ── Single-lead entry sheet ─────────────────────────────────────────
 
+/// Admin Pool Upload — single-lead entry sheet. Mirrors the RM Add Lead
+/// form's data shape (entity type · split or entity name · designation ·
+/// company · phone · email · vertical · city · estimated AUM) so leads
+/// added by Admin / MIS carry the same richness as ones the RM captures
+/// directly. Key contacts are intentionally NOT captured here — pool
+/// leads inherit their key contacts later, when the claiming RM enriches
+/// the lead post-claim.
 class _SingleLeadEntrySheet extends StatefulWidget {
   final LeadSource source;
   const _SingleLeadEntrySheet({required this.source});
@@ -1554,36 +1832,104 @@ class _SingleLeadEntrySheet extends StatefulWidget {
 }
 
 class _SingleLeadEntrySheetState extends State<_SingleLeadEntrySheet> {
-  final _name = TextEditingController();
+  // Lead type
+  LeadEntityType _entityType = LeadEntityType.individual;
+  final _entityTypeOther = TextEditingController();
+
+  // Names (Individual)
+  final _firstName = TextEditingController();
+  final _middleName = TextEditingController();
+  final _lastName = TextEditingController();
+
+  // Names (Non-Individual)
+  final _entityName = TextEditingController();
+
+  // Designation (Individual only)
+  LeadDesignation? _designation;
+  final _designationOther = TextEditingController();
+
+  // Common fields
+  final _company = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
-  final _company = TextEditingController();
   final _city = TextEditingController();
+  final _aumCr = TextEditingController(); // Estimated AUM in ₹ Cr
   String _vertical = 'EWG';
 
   @override
   void dispose() {
-    _name.dispose();
+    _entityTypeOther.dispose();
+    _firstName.dispose();
+    _middleName.dispose();
+    _lastName.dispose();
+    _entityName.dispose();
+    _designationOther.dispose();
+    _company.dispose();
     _phone.dispose();
     _email.dispose();
-    _company.dispose();
     _city.dispose();
+    _aumCr.dispose();
     super.dispose();
   }
 
-  bool get _canSave => _name.text.trim().isNotEmpty;
+  String get _computedName {
+    if (!_entityType.isIndividual) return _entityName.text.trim();
+    final parts = [
+      _firstName.text.trim(),
+      _middleName.text.trim(),
+      _lastName.text.trim(),
+    ].where((p) => p.isNotEmpty);
+    return parts.join(' ');
+  }
+
+  bool get _canSave {
+    if (_entityType.isIndividual) {
+      if (_firstName.text.trim().isEmpty) return false;
+      if (_lastName.text.trim().isEmpty) return false;
+      if (_designation == LeadDesignation.others &&
+          _designationOther.text.trim().isEmpty) {
+        return false;
+      }
+    } else {
+      if (_entityName.text.trim().isEmpty) return false;
+    }
+    if (_entityType == LeadEntityType.others &&
+        _entityTypeOther.text.trim().isEmpty) {
+      return false;
+    }
+    return true;
+  }
 
   void _submit() {
     if (!_canSave) return;
     final ts = DateTime.now().millisecondsSinceEpoch;
+    final aumCr = double.tryParse(_aumCr.text.trim());
+    final aumRupees = aumCr != null && aumCr > 0 ? aumCr * 1e7 : null;
+    final company = _company.text.trim();
     final lead = LeadModel(
       id: 'POOL$ts',
-      fullName: _name.text.trim(),
+      entityType: _entityType,
+      entityTypeOther: _entityType == LeadEntityType.others
+          ? _entityTypeOther.text.trim()
+          : null,
+      fullName: _computedName,
+      firstName:
+          _entityType.isIndividual ? _firstName.text.trim() : null,
+      middleName: _entityType.isIndividual && _middleName.text.trim().isNotEmpty
+          ? _middleName.text.trim()
+          : null,
+      lastName: _entityType.isIndividual ? _lastName.text.trim() : null,
+      designation: _entityType.isIndividual ? _designation : null,
+      designationOther: (_entityType.isIndividual &&
+              _designation == LeadDesignation.others)
+          ? _designationOther.text.trim()
+          : null,
       phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       email: _email.text.trim().isEmpty ? null : _email.text.trim(),
-      companyName:
-          _company.text.trim().isEmpty ? null : _company.text.trim(),
+      companyName: company.isEmpty ? null : company,
+      groupName: company.isEmpty ? null : company,
       city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+      estimatedAum: aumRupees,
       source: widget.source,
       stage: LeadStage.lead,
       assignedRmId: 'POOL',
@@ -1607,81 +1953,203 @@ class _SingleLeadEntrySheetState extends State<_SingleLeadEntrySheet> {
             color: AppColors.surfacePrimary,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.92,
+          ),
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.borderDefault,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.borderDefault,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text('Add lead to ${widget.source.label} pool',
-                    style: AppTextStyles.heading3
-                        .copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 14),
-                CompassTextField(
-                  controller: _name,
-                  label: 'Full name',
-                  isRequired: true,
-                  onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              Text('Add lead to ${widget.source.label} pool',
+                  style: AppTextStyles.heading3
+                      .copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                'Captures the same prospect detail an RM would enter — '
+                'minus key contacts (RMs add those after claiming).',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Lead type ───────────────────────────────────
+                      const CompassSectionHeader(title: 'Lead type'),
+                      const SizedBox(height: 8),
+                      CompassDropdown<LeadEntityType>(
+                        label: 'Entity type',
+                        isRequired: true,
+                        value: _entityType,
+                        items: LeadEntityType.values
+                            .map((t) => CompassDropdownItem(
+                                value: t, label: t.label))
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          _entityType = v ?? LeadEntityType.individual;
+                          if (!_entityType.isIndividual) {
+                            _designation = null;
+                          }
+                        }),
+                      ),
+                      if (_entityType == LeadEntityType.others) ...[
+                        const SizedBox(height: 10),
+                        CompassTextField(
+                          controller: _entityTypeOther,
+                          label: 'Specify lead type',
+                          isRequired: true,
+                          hint: 'e.g. Section 8 Company',
+                          maxLength: 100,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+
+                      // ── Name ────────────────────────────────────────
+                      const CompassSectionHeader(title: 'Name'),
+                      const SizedBox(height: 8),
+                      if (_entityType.isIndividual) ...[
+                        CompassTextField(
+                          controller: _firstName,
+                          label: 'First name',
+                          isRequired: true,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        CompassTextField(
+                          controller: _middleName,
+                          label: 'Middle name',
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        CompassTextField(
+                          controller: _lastName,
+                          label: 'Last name',
+                          isRequired: true,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        CompassDropdown<LeadDesignation>(
+                          label: 'Designation',
+                          value: _designation,
+                          items: LeadDesignation.values
+                              .map((d) => CompassDropdownItem(
+                                  value: d, label: d.label))
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _designation = v),
+                        ),
+                        if (_designation == LeadDesignation.others) ...[
+                          const SizedBox(height: 10),
+                          CompassTextField(
+                            controller: _designationOther,
+                            label: 'Specify designation',
+                            isRequired: true,
+                            hint: 'e.g. Trustee, Authorised Signatory',
+                            maxLength: 60,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ],
+                      ] else ...[
+                        CompassTextField(
+                          controller: _entityName,
+                          label: 'Entity name',
+                          isRequired: true,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      CompassTextField(
+                        controller: _company,
+                        label: 'Company name',
+                        hint: 'Optional — used for coverage / family de-dupe',
+                        prefixIcon: Icons.business_outlined,
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ── Contact ─────────────────────────────────────
+                      const CompassSectionHeader(title: 'Contact'),
+                      const SizedBox(height: 8),
+                      CompassTextField(
+                        controller: _phone,
+                        label: 'Mobile',
+                        hint: '+91 9XXXXXXXXX',
+                        keyboardType: TextInputType.phone,
+                        prefixIcon: Icons.phone_outlined,
+                      ),
+                      const SizedBox(height: 10),
+                      CompassTextField(
+                        controller: _email,
+                        label: 'Email',
+                        keyboardType: TextInputType.emailAddress,
+                        prefixIcon: Icons.email_outlined,
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ── Classification & financials ─────────────────
+                      const CompassSectionHeader(
+                          title: 'Classification & financials'),
+                      const SizedBox(height: 8),
+                      Text('Vertical',
+                          style: AppTextStyles.labelSmall
+                              .copyWith(color: AppColors.textSecondary)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: ['EWG', 'PWG'].map((v) {
+                          final selected = _vertical == v;
+                          return ChoiceChip(
+                            label: Text(v),
+                            selected: selected,
+                            onSelected: (_) =>
+                                setState(() => _vertical = v),
+                            selectedColor: AppColors.navyPrimary
+                                .withValues(alpha: 0.12),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      CompassTextField(
+                        controller: _city,
+                        label: 'City',
+                        prefixIcon: Icons.location_on_outlined,
+                      ),
+                      const SizedBox(height: 10),
+                      CompassTextField(
+                        controller: _aumCr,
+                        label: 'Estimated AUM (₹ Cr)',
+                        hint: 'Optional · e.g. 5  (means ₹5 Cr)',
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        prefixIcon: Icons.account_balance_wallet_outlined,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                CompassTextField(
-                  controller: _phone,
-                  label: 'Phone',
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 10),
-                CompassTextField(
-                  controller: _email,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 10),
-                Text('Vertical',
-                    style: AppTextStyles.labelSmall
-                        .copyWith(color: AppColors.textSecondary)),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  children: ['EWG', 'PWG'].map((v) {
-                    final selected = _vertical == v;
-                    return ChoiceChip(
-                      label: Text(v),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _vertical = v),
-                      selectedColor:
-                          AppColors.navyPrimary.withValues(alpha: 0.12),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 10),
-                CompassTextField(
-                  controller: _company,
-                  label: 'Company',
-                ),
-                const SizedBox(height: 10),
-                CompassTextField(
-                  controller: _city,
-                  label: 'City',
-                ),
-                const SizedBox(height: 16),
-                CompassButton(
-                  label: 'Add to pool',
-                  icon: Icons.add,
-                  onPressed: _canSave ? _submit : null,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 14),
+              CompassButton(
+                label: 'Add to pool',
+                icon: Icons.add,
+                onPressed: _canSave ? _submit : null,
+              ),
+            ],
           ),
         ),
       ),

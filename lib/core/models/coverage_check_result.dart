@@ -55,7 +55,7 @@ class CoverageCheckResult {
       CoverageCheckResult(
         status: CoverageStatus.existingClient,
         message:
-            '${record.clientName} is already a client managed by ${record.rmName ?? 'another RM'}.',
+            'This person is already a client of the firm — managed by ${record.rmName ?? 'another RM'}.',
         matchedRecord: record,
         existingClientName: record.clientName,
         existingRmName: record.rmName,
@@ -73,7 +73,7 @@ class CoverageCheckResult {
       CoverageCheckResult(
         status: CoverageStatus.duplicateLead,
         message:
-            'A lead with similar details already exists with ${record.rmName ?? 'another RM'}.',
+            '${record.rmName ?? 'Another RM'} is already working this lead.',
         matchedRecord: record,
         existingLeadId: record.id,
         existingRmName: record.rmName,
@@ -89,7 +89,7 @@ class CoverageCheckResult {
       CoverageCheckResult(
         status: CoverageStatus.requiresReview,
         message:
-            'Found ${matches.length} potential matches. Review before proceeding.',
+            'We found ${matches.length} similar record${matches.length == 1 ? '' : 's'} — could be the same person.',
         alternateMatches: matches,
       );
 }

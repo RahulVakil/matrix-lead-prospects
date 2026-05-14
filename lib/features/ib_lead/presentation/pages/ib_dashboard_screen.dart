@@ -583,12 +583,6 @@ class _IbCard extends StatelessWidget {
         IbLeadStatus.dropped => AppColors.dormantGray,
       };
 
-  Color get _tempColor => switch (ib.temperature) {
-        IbLeadTemperature.hot => AppColors.errorRed,
-        IbLeadTemperature.warm => AppColors.warmAmber,
-        IbLeadTemperature.cold => AppColors.coldBlue,
-      };
-
   @override
   Widget build(BuildContext context) {
     return Padding(

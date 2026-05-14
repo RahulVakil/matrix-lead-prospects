@@ -10,6 +10,7 @@ import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../cubit/leads_dashboard_cubit.dart';
+import '../widgets/leads_add_sheet.dart';
 
 /// Leads Dashboard — production-grade home with visual funnel,
 /// prominent totals, dropped count, and action-today.
@@ -45,7 +46,8 @@ class LeadsDashboardScreen extends StatelessWidget {
             ),
             floatingActionButton: FloatingActionButton(
               backgroundColor: AppColors.navyPrimary,
-              onPressed: () => context.push('/leads/new'),
+              shape: const CircleBorder(),
+              onPressed: () => LeadsAddSheet.show(context),
               child: const Icon(Icons.add, color: Colors.white),
             ),
             body: state.isLoading
@@ -159,12 +161,20 @@ class _DashHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
+    final canPop = Navigator.of(context).canPop();
     return Container(
       width: double.infinity,
       color: AppColors.heroBackdrop,
-      padding: EdgeInsets.fromLTRB(18, topInset + 12, 14, 18),
+      padding: EdgeInsets.fromLTRB(canPop ? 6 : 18, topInset + 12, 14, 18),
       child: Row(
         children: [
+          if (canPop)
+            IconButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+              splashRadius: 22,
+            ),
+          if (canPop) const SizedBox(width: 4),
           Container(
             width: 44,
             height: 44,

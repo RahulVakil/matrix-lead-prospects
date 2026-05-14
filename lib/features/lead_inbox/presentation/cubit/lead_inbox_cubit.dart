@@ -9,6 +9,13 @@ import '../../../../core/enums/lead_temperature.dart';
 import '../../../../core/models/lead_model.dart';
 import '../../../../core/repositories/lead_repository.dart';
 
+/// Mock reassignment-to-me lead IDs. Kept in sync with the lead-card UI's
+/// `_isReassignedToMe()` so the home Leads pipeline filter and the per-row
+/// pill always agree. Production: derived from `previousAssignedRmId ==
+/// viewer.rmId` AND `reassignedAt` within 7 days.
+const Set<String> kReassignedToMeIds = {'lead_002', 'lead_005'};
+const Set<String> kReassignedAwayIds = {'lead_007', 'lead_009'};
+
 class LeadInboxState extends Equatable {
   final bool isLoading;
   final List<LeadModel> leads;
@@ -25,6 +32,11 @@ class LeadInboxState extends Equatable {
   final bool activeOnly;
   final bool ibLinkedOnly;
   final bool myLeadsOnly;
+  /// Lifecycle-stage filter — applied when the user taps a stage row in the
+  /// home Leads pipeline ("Lead" / "Contacted" / "IB Pending" / etc.).
+  final LeadStage? lifecycleFilter;
+  /// Reassignment filter — 'to_me' or 'away'; null = no filter.
+  final String? reassignmentFilter;
   final String? sortBy;
   final String? searchQuery;
   final int page;
@@ -39,6 +51,8 @@ class LeadInboxState extends Equatable {
     this.activeOnly = false,
     this.ibLinkedOnly = false,
     this.myLeadsOnly = false,
+    this.lifecycleFilter,
+    this.reassignmentFilter,
     this.sortBy = 'name',
     this.searchQuery,
     this.page = 1,
@@ -56,6 +70,10 @@ class LeadInboxState extends Equatable {
     bool? activeOnly,
     bool? ibLinkedOnly,
     bool? myLeadsOnly,
+    LeadStage? lifecycleFilter,
+    bool clearLifecycleFilter = false,
+    String? reassignmentFilter,
+    bool clearReassignmentFilter = false,
     String? sortBy,
     String? searchQuery,
     bool clearSearchQuery = false,
@@ -73,6 +91,12 @@ class LeadInboxState extends Equatable {
       activeOnly: activeOnly ?? this.activeOnly,
       ibLinkedOnly: ibLinkedOnly ?? this.ibLinkedOnly,
       myLeadsOnly: myLeadsOnly ?? this.myLeadsOnly,
+      lifecycleFilter: clearLifecycleFilter
+          ? null
+          : (lifecycleFilter ?? this.lifecycleFilter),
+      reassignmentFilter: clearReassignmentFilter
+          ? null
+          : (reassignmentFilter ?? this.reassignmentFilter),
       sortBy: sortBy ?? this.sortBy,
       searchQuery:
           clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
@@ -91,6 +115,8 @@ class LeadInboxState extends Equatable {
         activeOnly,
         ibLinkedOnly,
         myLeadsOnly,
+        lifecycleFilter,
+        reassignmentFilter,
         sortBy,
         searchQuery,
         page,
@@ -107,10 +133,14 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
     LeadTemperature? initialStatus,
     LeadSource? initialSource,
     bool initialActiveOnly = false,
+    LeadStage? initialLifecycle,
+    String? initialReassignment,
   }) : super(LeadInboxState(
           statusFilter: initialStatus,
           sourceFilter: initialSource,
           activeOnly: initialActiveOnly,
+          lifecycleFilter: initialLifecycle,
+          reassignmentFilter: initialReassignment,
         ));
 
   @override
@@ -151,6 +181,19 @@ class LeadInboxCubit extends Cubit<LeadInboxState> {
             .where((l) =>
                 l.stage != LeadStage.dropped && l.stage != LeadStage.onboard)
             .toList();
+      }
+      // Lifecycle stage filter — driven by the home Leads pipeline rows.
+      if (state.lifecycleFilter != null) {
+        items =
+            items.where((l) => l.stage == state.lifecycleFilter).toList();
+      }
+      // Reassignment filter — uses mock id sets above.
+      if (state.reassignmentFilter == 'to_me') {
+        items =
+            items.where((l) => kReassignedToMeIds.contains(l.id)).toList();
+      } else if (state.reassignmentFilter == 'away') {
+        items =
+            items.where((l) => kReassignedAwayIds.contains(l.id)).toList();
       }
 
       emit(state.copyWith(

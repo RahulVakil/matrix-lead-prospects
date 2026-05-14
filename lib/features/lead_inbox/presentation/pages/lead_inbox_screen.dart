@@ -10,31 +10,14 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/pii_display.dart';
 import '../../../../core/widgets/compass_chip.dart';
-import '../../../../core/widgets/compass_text_field.dart';
 import '../../../../core/widgets/hero_app_bar.dart';
 import '../../../../core/widgets/hero_scaffold.dart';
 import '../../../../routing/route_names.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../leads_dashboard/presentation/widgets/leads_add_sheet.dart';
+import '../../../matrix_home/presentation/widgets/lead_status_pill.dart';
+import '../../../matrix_home/presentation/widgets/leads_hero_card.dart';
 import '../cubit/lead_inbox_cubit.dart';
-
-// ── RAG color mapping (stage → temperature color) ────────────────────
-// Lead / Dropped = Cold = Blue
-// Profiling / Engage = Warm = Amber
-// Onboarded = Hot = Red
-Color _stageRagColor(LeadStage stage) {
-  switch (stage) {
-    case LeadStage.lead:
-    case LeadStage.dropped:
-      return AppColors.coldBlue;
-    case LeadStage.profiling:
-    case LeadStage.engage:
-      return AppColors.warmAmber;
-    case LeadStage.onboard:
-      return AppColors.hotRed;
-    default:
-      return AppColors.dormantGray;
-  }
-}
 
 /// All Leads listing — mobile-first, clean filter sheet, status pill.
 /// Optional initial filters can be passed via route extras (used by the
@@ -48,6 +31,21 @@ class LeadInboxScreen extends StatelessWidget {
   /// the Leadership "Total leads" KPI tile semantics.
   final bool initialActiveOnly;
   final String? titleOverride;
+  /// When true, render the LeadsHeroCard (KPI hero with Hot/Warm/Cold +
+  /// conversion) above the All-leads list. Used by the /leads-dashboard
+  /// entry so the user lands on the list directly with the dashboard
+  /// summary on top — saves a click vs a separate dashboard screen.
+  final bool showHero;
+  /// Pre-applied lifecycle stage filter (Lead / Profiling / Engage /
+  /// Onboard / Dropped). Driven by the home Leads pipeline list rows.
+  final LeadStage? initialLifecycle;
+  /// Reassignment filter — 'to_me' or 'away'.
+  final String? initialReassignment;
+  /// TL-view: when set, the Leads dashboard renders someone else's
+  /// pipeline. Shows a banner + hides the FAB so the TL can't create on
+  /// the RM's behalf.
+  final String? rmIdOverride;
+  final String? rmNameOverride;
 
   const LeadInboxScreen({
     super.key,
@@ -55,6 +53,11 @@ class LeadInboxScreen extends StatelessWidget {
     this.initialSource,
     this.initialActiveOnly = false,
     this.titleOverride,
+    this.showHero = false,
+    this.initialLifecycle,
+    this.initialReassignment,
+    this.rmIdOverride,
+    this.rmNameOverride,
   });
 
   @override
@@ -64,19 +67,33 @@ class LeadInboxScreen extends StatelessWidget {
 
     return BlocProvider(
       create: (_) => LeadInboxCubit(
-        rmId: user.id,
+        rmId: rmIdOverride ?? user.id,
         initialStatus: initialStatus,
         initialSource: initialSource,
         initialActiveOnly: initialActiveOnly,
+        initialLifecycle: initialLifecycle,
+        initialReassignment: initialReassignment,
       )..loadLeads(refresh: true),
-      child: _InboxBody(titleOverride: titleOverride),
+      child: _InboxBody(
+        titleOverride: titleOverride,
+        showHero: showHero,
+        viewingRmName: rmNameOverride,
+      ),
     );
   }
 }
 
 class _InboxBody extends StatefulWidget {
   final String? titleOverride;
-  const _InboxBody({this.titleOverride});
+  final bool showHero;
+  /// When set, the screen is rendering this RM's pipeline for a TL viewer.
+  /// Drives the "Viewing X's pipeline" banner + hides the FAB.
+  final String? viewingRmName;
+  const _InboxBody({
+    this.titleOverride,
+    this.showHero = false,
+    this.viewingRmName,
+  });
 
   @override
   State<_InboxBody> createState() => _InboxBodyState();
@@ -101,184 +118,51 @@ class _InboxBodyState extends State<_InboxBody> {
             (state.ibLinkedOnly ? 1 : 0) +
             (state.myLeadsOnly ? 1 : 0);
 
+        // Visible count after all filters (lifecycle / reassignment /
+        // search / status). state.totalCount is the unfiltered repo total
+        // and would mislead the header when a filter is applied.
+        final visibleCount = state.leads.length;
+
+        final isTlView = widget.viewingRmName != null;
         return HeroScaffold(
           header: HeroAppBar.simple(
-              title: widget.titleOverride ?? 'All leads',
-              subtitle: '${state.totalCount} total'),
-          // FAB routes straight to New Wealth Lead. Direct IB lead creation
-          // is disallowed — IB leads must originate from a wealth lead via
-          // the "Convert to IB Lead" 3-dot action on the wealth detail screen.
-          floatingActionButton: FloatingActionButton(
-            backgroundColor: AppColors.navyPrimary,
-            onPressed: () => context.push('/leads/new'),
-            child: const Icon(Icons.add, color: Colors.white),
-          ),
-          body: Column(
-            children: [
-              // ── Search (#1, #2) ─────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-                child: CompassTextField(
-                  controller: _searchCtrl,
-                  hint: 'Search by name, company, group, or code…',
-                  prefixIcon: Icons.search,
-                  onChanged: cubit.search,
-                  suffix: (state.searchQuery ?? '').isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            cubit.search('');
-                          },
-                          splashRadius: 18,
-                          tooltip: 'Clear search',
-                        ),
+              title: isTlView
+                  ? '${widget.viewingRmName}\'s pipeline'
+                  : (widget.titleOverride ??
+                      (widget.showHero ? 'Leads' : 'All leads')),
+              subtitle: widget.showHero ? null : '$visibleCount total'),
+          // FAB hidden in TL-view — TL can't create on the RM's behalf.
+          floatingActionButton: isTlView
+              ? null
+              : FloatingActionButton(
+                  backgroundColor: AppColors.navyPrimary,
+                  shape: const CircleBorder(),
+                  onPressed: () => LeadsAddSheet.show(context),
+                  child: const Icon(Icons.add, color: Colors.white),
                 ),
-              ),
-
-              // ── Filter pill + Sort dropdown (#3, #4) ───────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                child: Row(
-                  children: [
-                    // Filter pill → opens bottom sheet
-                    InkWell(
-                      onTap: () => _showFilterSheet(context, state, cubit),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: activeFilterCount > 0
-                              ? AppColors.navyPrimary.withValues(alpha: 0.1)
-                              : AppColors.surfaceTertiary,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: activeFilterCount > 0
-                                ? AppColors.navyPrimary.withValues(alpha: 0.4)
-                                : AppColors.borderDefault,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.tune,
-                                size: 15,
-                                color: activeFilterCount > 0
-                                    ? AppColors.navyPrimary
-                                    : AppColors.textSecondary),
-                            const SizedBox(width: 5),
-                            Text(
-                              activeFilterCount > 0
-                                  ? 'Filter  $activeFilterCount'
-                                  : 'Filter',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: activeFilterCount > 0
-                                    ? AppColors.navyPrimary
-                                    : AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    // Sort dropdown — 4 options only (#4)
-                    DropdownButton<String>(
-                      value: state.sortBy ?? 'name',
-                      underline: const SizedBox.shrink(),
-                      isDense: true,
-                      style: AppTextStyles.labelSmall
-                          .copyWith(color: AppColors.navyPrimary),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'name', child: Text('Name A – Z')),
-                        DropdownMenuItem(
-                            value: 'created_desc',
-                            child: Text('Created (latest)')),
-                        DropdownMenuItem(
-                            value: 'created_asc',
-                            child: Text('Created (oldest)')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) cubit.setSort(v);
-                      },
-                    ),
-                  ],
+          body: state.isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                      color: AppColors.navyPrimary))
+              : RefreshIndicator(
+                  color: AppColors.navyPrimary,
+                  onRefresh: () => cubit.loadLeads(refresh: true),
+                  child: _ScrollableBody(
+                    leads: state.leads,
+                    state: state,
+                    cubit: cubit,
+                    showHero: widget.showHero,
+                    activeFilterCount: activeFilterCount,
+                    titleOverride: widget.titleOverride,
+                    viewingRmName: widget.viewingRmName,
+                    onFilterTap: () => _showFilterSheet(context, state, cubit),
+                    onSearchClear: () {
+                      _searchCtrl.clear();
+                      cubit.search('');
+                    },
+                    searchCtrl: _searchCtrl,
+                  ),
                 ),
-              ),
-
-              const Divider(height: 1),
-
-              // ── List ────────────────────────────────────────────
-              Expanded(
-                child: state.isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                            color: AppColors.navyPrimary))
-                    : state.leads.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.inbox_outlined,
-                                    size: 44, color: AppColors.textHint),
-                                const SizedBox(height: 12),
-                                Text(
-                                  (state.searchQuery ?? '').isNotEmpty
-                                      ? "No leads matching '${state.searchQuery}'"
-                                      : 'No leads match',
-                                  style: AppTextStyles.bodyLarge,
-                                ),
-                                const SizedBox(height: 4),
-                                TextButton(
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    cubit.setStatusFilter(null);
-                                    cubit.setIbLinkedOnly(false);
-                                    cubit.search('');
-                                  },
-                                  child: const Text('Clear filters'),
-                                ),
-                              ],
-                            ),
-                          )
-                        : RefreshIndicator(
-                            color: AppColors.navyPrimary,
-                            onRefresh: () => cubit.loadLeads(refresh: true),
-                            child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(14, 10, 14, 96),
-                              itemCount: state.leads.length,
-                              itemBuilder: (_, i) {
-                                final lead = state.leads[i];
-                                final showDate =
-                                    state.sortBy == 'created_desc' ||
-                                    state.sortBy == 'created_asc';
-                                final user = context
-                                    .read<AuthCubit>()
-                                    .state
-                                    .currentUser;
-                                final isTl =
-                                    user?.role == UserRole.teamLead;
-                                return _LeadCard(
-                                  lead: lead,
-                                  showCreatedDate: showDate,
-                                  isMyLead: isTl &&
-                                      lead.assignedRmId == user?.id,
-                                  highlightQuery: state.searchQuery,
-                                  onTap: () => context.push(
-                                    RouteNames.leadDetailPath(lead.id),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-              ),
-            ],
-          ),
         );
       },
     );
@@ -303,6 +187,340 @@ class _InboxBodyState extends State<_InboxBody> {
           cubit.setMyLeadsOnly(myOnly);
         },
       ),
+    );
+  }
+}
+
+/// One scrollable body — hero (when shown), section row with inline
+/// filter/sort, compact search, and the lead list. All scroll together so
+/// the hero/search/filter scroll away as the user scrolls the list,
+/// leaving the lead cards in full view.
+class _ScrollableBody extends StatelessWidget {
+  final List<LeadModel> leads;
+  final LeadInboxState state;
+  final LeadInboxCubit cubit;
+  final bool showHero;
+  final int activeFilterCount;
+  final String? titleOverride;
+  final String? viewingRmName;
+  final VoidCallback onFilterTap;
+  final VoidCallback onSearchClear;
+  final TextEditingController searchCtrl;
+
+  const _ScrollableBody({
+    required this.leads,
+    required this.state,
+    required this.cubit,
+    required this.showHero,
+    required this.activeFilterCount,
+    this.titleOverride,
+    this.viewingRmName,
+    required this.onFilterTap,
+    required this.onSearchClear,
+    required this.searchCtrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Index map (with optional TL-view banner at the very top):
+    //   0 → TL-view banner (only when viewingRmName != null)
+    //   1 → hero (only when showHero)
+    //   2 → section header row (title + filter pill + sort)
+    //   3 → search field
+    //   4 → divider
+    //   5..N → lead cards (or empty state)
+    final hasBanner = viewingRmName != null;
+    final headerCount =
+        (hasBanner ? 1 : 0) + (showHero ? 1 : 0) + 3; // section + search + divider
+    final hasEmpty = leads.isEmpty;
+    final itemCount = headerCount + (hasEmpty ? 1 : leads.length);
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 96),
+      itemCount: itemCount,
+      itemBuilder: (_, index) {
+        final user = context.read<AuthCubit>().state.currentUser;
+        final isTl = user?.role == UserRole.teamLead;
+
+        // 0 — TL-view banner
+        if (hasBanner && index == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _TlViewBanner(rmName: viewingRmName!),
+          );
+        }
+        final bannerAdj = hasBanner ? 1 : 0;
+
+        if (showHero && index == bannerAdj) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: LeadsHeroCard(
+              active: 12,
+              dropped: 3,
+              onboarded: 8,
+              funnelTotal: 23,
+              hot: 4,
+              warm: 5,
+              cold: 3,
+            ),
+          );
+        }
+
+        final adj = bannerAdj + (showHero ? 1 : 0);
+
+        if (index == adj) {
+          // Section header — labels reflect the active filter (titleOverride
+          // when set; otherwise "All leads"). Count is the visible-after-
+          // filter list length, not the unfiltered repo total.
+          final headerLabel = titleOverride ?? 'All leads';
+          final visibleCount = leads.length;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 14, 6),
+            child: Row(
+              children: [
+                Text(
+                  headerLabel,
+                  style: AppTextStyles.heading3.copyWith(
+                    color: const Color(0xFF0A1629),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$visibleCount total',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted),
+                ),
+                const Spacer(),
+                _FilterPill(
+                  count: activeFilterCount,
+                  onTap: onFilterTap,
+                ),
+                const SizedBox(width: 8),
+                _SortDropdown(
+                  value: state.sortBy ?? 'name',
+                  onChanged: (v) => cubit.setSort(v),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (index == adj + 1) {
+          // Compact search field
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: SizedBox(
+              height: 36,
+              child: TextField(
+                controller: searchCtrl,
+                onChanged: cubit.search,
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Search the list…',
+                  hintStyle: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textHint),
+                  prefixIcon: const Icon(Icons.search,
+                      size: 16, color: AppColors.textMuted),
+                  prefixIconConstraints: const BoxConstraints(
+                      minWidth: 32, minHeight: 32),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  filled: true,
+                  fillColor: AppColors.surfaceTertiary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.borderDefault),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.borderDefault),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                        color: AppColors.navyPrimary, width: 1.2),
+                  ),
+                  suffixIcon: (state.searchQuery ?? '').isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 14),
+                          onPressed: onSearchClear,
+                          splashRadius: 14,
+                          tooltip: 'Clear search',
+                        ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (index == adj + 2) {
+          return const Divider(height: 1);
+        }
+
+        if (hasEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 60),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.inbox_outlined,
+                      size: 44, color: AppColors.textHint),
+                  const SizedBox(height: 12),
+                  Text(
+                    (state.searchQuery ?? '').isNotEmpty
+                        ? "No leads matching '${state.searchQuery}'"
+                        : 'No leads match',
+                    style: AppTextStyles.bodyLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  TextButton(
+                    onPressed: () {
+                      searchCtrl.clear();
+                      cubit.setStatusFilter(null);
+                      cubit.setIbLinkedOnly(false);
+                      cubit.search('');
+                    },
+                    child: const Text('Clear filters'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final leadIndex = index - headerCount;
+        final lead = leads[leadIndex];
+        final showDate = state.sortBy == 'created_desc' ||
+            state.sortBy == 'created_asc';
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+          child: _LeadCard(
+            lead: lead,
+            showCreatedDate: showDate,
+            isMyLead: isTl && lead.assignedRmId == user?.id,
+            highlightQuery: state.searchQuery,
+            onTap: () =>
+                context.push(RouteNames.leadDetailPath(lead.id)),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TlViewBanner extends StatelessWidget {
+  final String rmName;
+  const _TlViewBanner({required this.rmName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.warmAmber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: AppColors.warmAmber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.visibility_outlined,
+              size: 16, color: AppColors.warmAmber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Viewing $rmName's pipeline · read-only",
+              style: AppTextStyles.bodySmall.copyWith(
+                color: const Color(0xFF8A4F00),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+  const _FilterPill({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = count > 0;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.navyPrimary.withValues(alpha: 0.1)
+              : AppColors.surfaceTertiary,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active
+                ? AppColors.navyPrimary.withValues(alpha: 0.4)
+                : AppColors.borderDefault,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune,
+                size: 13,
+                color: active
+                    ? AppColors.navyPrimary
+                    : AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text(
+              active ? 'Filter $count' : 'Filter',
+              style: AppTextStyles.labelSmall.copyWith(
+                color: active
+                    ? AppColors.navyPrimary
+                    : AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SortDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _SortDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButton<String>(
+      value: value,
+      underline: const SizedBox.shrink(),
+      isDense: true,
+      icon: const Icon(Icons.sort, size: 14, color: AppColors.navyPrimary),
+      style: AppTextStyles.labelSmall.copyWith(
+        color: AppColors.navyPrimary,
+        fontSize: 11,
+      ),
+      items: const [
+        DropdownMenuItem(value: 'name', child: Text('A–Z')),
+        DropdownMenuItem(value: 'created_desc', child: Text('Latest')),
+        DropdownMenuItem(value: 'created_asc', child: Text('Oldest')),
+      ],
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
     );
   }
 }
@@ -470,8 +688,39 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Lead card (#10) — Name + Source + Stage pill with RAG color
+// Lead card (#10) — Name + Source + Lifecycle pill + Reassignment pill
 // ─────────────────────────────────────────────────────────────────────
+
+/// Maps the prototype's existing [LeadStage] enum to the agreed Wealth-CRM
+/// dashboard status set used on lead-card pills.
+LeadDashStatus _toLeadDashStatus(LeadStage stage) {
+  switch (stage) {
+    case LeadStage.lead:
+      return LeadDashStatus.lead;
+    case LeadStage.profiling:
+      return LeadDashStatus.ibPending;
+    case LeadStage.engage:
+      return LeadDashStatus.contacted;
+    case LeadStage.onboard:
+      return LeadDashStatus.onboarded;
+    case LeadStage.dropped:
+    case LeadStage.lostCompetitor:
+    case LeadStage.lostNotInterested:
+    case LeadStage.lostTiming:
+      return LeadDashStatus.dropped;
+    case LeadStage.parked:
+    case LeadStage.dormant:
+      return LeadDashStatus.contacted;
+  }
+}
+
+/// Mock — production: derive from `previousAssignedRmId == viewer.rmId`
+/// AND `reassignedAt` within 7 days (per the Reassignment ticket).
+bool _isReassignedToMe(String leadId) {
+  // Two lead IDs hard-mocked so the pill is visible in the demo.
+  const reassignedIds = {'lead_002', 'lead_005'};
+  return reassignedIds.contains(leadId);
+}
 
 class _LeadCard extends StatelessWidget {
   final LeadModel lead;
@@ -625,24 +874,38 @@ class _LeadCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Temperature pill + badges (right-aligned column)
+                // Lifecycle status + reassignment pill + supporting badges
+                // (right-aligned column). Lifecycle stage is the primary
+                // signal; temperature and assignment context sit below.
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: ragColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
+                    // Lifecycle stage pill — uses the agreed Wealth-CRM
+                    // statuses (Lead / Contacted / IB Pending / IB Approved /
+                    // Onboarded / Dropped).
+                    LeadStatusPill(
+                      status: _toLeadDashStatus(lead.stage),
+                      dense: true,
+                    ),
+                    // Reassignment pill (computed per viewer). For prototype
+                    // demo, two lead IDs are hard-mocked as "Reassigned to me"
+                    // so the pill is visible without requiring real data.
+                    if (_isReassignedToMe(lead.id)) ...[
+                      const SizedBox(height: 4),
+                      const LeadStatusPill(
+                        status: LeadDashStatus.reassignedToMe,
+                        dense: true,
                       ),
-                      child: Text(
-                        temp.label,
-                        style: AppTextStyles.caption.copyWith(
-                          color: ragColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10.5,
-                        ),
+                    ],
+                    const SizedBox(height: 4),
+                    // Temperature label kept as a small secondary marker —
+                    // left RAG bar already conveys colour at a glance.
+                    Text(
+                      temp.label,
+                      style: AppTextStyles.caption.copyWith(
+                        color: ragColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
                       ),
                     ),
                     // RM-6: Newly Claimed badge (< 24h since creation)

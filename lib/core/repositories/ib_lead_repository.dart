@@ -9,4 +9,5 @@ abstract class IbLeadRepository {
   Future<IbLeadModel?> getById(String id);
   Future<IbLeadModel> approve(String id, {required String branchHeadId, required String branchHeadName});
   Future<IbLeadModel> sendBack(String id, {required String branchHeadId, required String branchHeadName, required String remarks});
+  Future<IbLeadModel> drop(String id, {required String branchHeadId, required String branchHeadName, required String remarks});
 }

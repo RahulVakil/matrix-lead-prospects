@@ -1,133 +1,38 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/enums/user_role.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../auth/presentation/cubit/auth_cubit.dart';
-import '../../cubit/shell_cubit.dart';
 import '../widgets/bottom_nav_bar.dart';
-import '../../../clients/presentation/pages/client_list_screen.dart';
-import '../../../dashboard_leadership/presentation/pages/leadership_dashboard_screen.dart';
-import '../../../ib_lead/presentation/pages/ib_dashboard_screen.dart';
-import '../../../leads_dashboard/presentation/pages/leads_dashboard_screen.dart';
-import 'more_screen.dart';
 
-/// AppShell: bottom nav. Tab 0 varies by role:
-/// RM → Leads Dashboard (personal pipeline)
-/// TL / Regional / Zonal / CEO / Admin → Leadership Dashboard (shared
-///   layout, scope filtered by the user's role + team/region/zone)
-/// IB → IB Dashboard
-class AppShell extends StatelessWidget {
-  const AppShell({super.key});
+/// AppShellScaffold — the persistent shell wrapped around all main app
+/// routes via StatefulShellRoute.indexedStack. Bottom nav stays visible
+/// through every push within a branch (e.g. Home → Leads list → Lead
+/// detail) so users always have a way back to other tabs.
+///
+/// Per-tab navigation state is preserved by the StatefulNavigationShell
+/// (each branch keeps its own back stack across tab switches).
+class AppShellScaffold extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthCubit>().state.currentUser;
-    if (user == null) return const SizedBox.shrink();
+  const AppShellScaffold({super.key, required this.navigationShell});
 
-    return BlocProvider(
-      create: (_) => ShellCubit(),
-      child: BlocBuilder<ShellCubit, int>(
-        builder: (context, currentIndex) {
-          final tabs = _tabsForRole(user.role);
-          final clampedIndex = currentIndex.clamp(0, tabs.length - 1);
-
-          return Scaffold(
-            backgroundColor: AppColors.heroBackdrop,
-            body: IndexedStack(
-              index: clampedIndex,
-              children: tabs,
-            ),
-            bottomNavigationBar: BottomNavBar(
-              currentIndex: clampedIndex,
-              onTap: (i) => context.read<ShellCubit>().updateIndex(i),
-            ),
-          );
-        },
-      ),
+  void _onTap(int index) {
+    // Tap on the active tab → reset that branch's stack to its initial route
+    // (matches the default mobile-app expectation: re-tapping Home goes back
+    // to the Home root rather than no-op).
+    navigationShell.goBranch(
+      index,
+      initialLocation: index == navigationShell.currentIndex,
     );
   }
-
-  List<Widget> _tabsForRole(UserRole role) {
-    switch (role) {
-      case UserRole.rm:
-        return const [
-          LeadsDashboardScreen(),
-          ClientListScreen(),
-          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-          MoreScreen(),
-        ];
-      case UserRole.teamLead:
-      case UserRole.regional:
-      case UserRole.zonal:
-      case UserRole.ceo:
-      case UserRole.admin:
-        // The shared Leadership dashboard derives its scope from the
-        // logged-in user's role (TL→team, Regional→region, Zonal→zone,
-        // CEO/Admin→all). Layout is identical at every level.
-        return const [
-          LeadershipDashboardScreen(),
-          ClientListScreen(showAll: true),
-          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-          MoreScreen(),
-        ];
-      case UserRole.ib:
-        return const [
-          IbDashboardScreen(),
-          _PlaceholderTab(title: 'Clients', icon: Icons.people_outline),
-          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-          MoreScreen(),
-        ];
-      default:
-        return const [
-          LeadsDashboardScreen(),
-          ClientListScreen(),
-          _PlaceholderTab(title: 'Analytics', icon: Icons.analytics_outlined),
-          MoreScreen(),
-        ];
-    }
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  const _PlaceholderTab({required this.title, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceContent,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.navyPrimary.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 30, color: AppColors.navyPrimary),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Coming soon',
-                style: TextStyle(fontSize: 12, color: AppColors.textHint),
-              ),
-            ],
-          ),
-        ),
+      backgroundColor: AppColors.heroBackdrop,
+      body: navigationShell,
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: navigationShell.currentIndex,
+        onTap: _onTap,
       ),
     );
   }

@@ -26,6 +26,26 @@ class RouteNames {
   static const String adminPool = '/admin/pool';
   static const String tlRequests = '/tl/requests';
 
+  // Follow-ups
+  static const String followUps = '/follow-ups';            // combined view
+  static const String followUpsOverdue = '/follow-ups/overdue'; // single bucket
+  static const String followUpsToday = '/follow-ups/today';     // single bucket
+
+  // Meetings
+  static const String meetings = '/meetings';
+  static const String meetingDetail = '/meetings/:meetingId';
+  static String meetingDetailPath(String id) => '/meetings/$id';
+
+  // Tasks (Show-All from home rollup)
+  static const String tasks = '/tasks';
+
+  // Team Lead — team aggregate dashboard
+  static const String myTeam = '/my-team';
+
+  // Day activity drill-down (Day Snapshot CTA)
+  static const String dayActivity = '/day/:date';
+  static String dayActivityPath(String date) => '/day/$date';
+
   // Phase 1 additions
   static const String coverage = '/coverage';
   static const String clientDetail = '/clients/:clientId';

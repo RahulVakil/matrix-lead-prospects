@@ -27,6 +27,29 @@ class ActivityModel {
     required this.createdAt,
   });
 
+  ActivityModel copyWith({
+    DateTime? dateTime,
+    int? durationMinutes,
+    String? notes,
+    ActivityOutcome? outcome,
+    String? loggedById,
+    String? loggedByName,
+  }) {
+    return ActivityModel(
+      id: id,
+      leadId: leadId,
+      type: type,
+      dateTime: dateTime ?? this.dateTime,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      notes: notes ?? this.notes,
+      outcome: outcome ?? this.outcome,
+      loggedById: loggedById ?? this.loggedById,
+      loggedByName: loggedByName ?? this.loggedByName,
+      isSystemGenerated: isSystemGenerated,
+      createdAt: createdAt,
+    );
+  }
+
   String get durationDisplay {
     if (durationMinutes == null) return '';
     if (durationMinutes! < 60) return '${durationMinutes}min';

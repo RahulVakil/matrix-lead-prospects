@@ -14,4 +14,17 @@ abstract class ActivityRepository {
     required String loggedById,
     required String loggedByName,
   });
+
+  /// Update fields on an existing activity record. Used to transition a
+  /// scheduled meeting (`outcome = followUp`) to either `completed` (with
+  /// notes / duration) or `cancelled` without creating a duplicate entry.
+  /// Returns the updated record.
+  Future<ActivityModel> updateActivity({
+    required String activityId,
+    required String leadId,
+    DateTime? dateTime,
+    int? durationMinutes,
+    String? notes,
+    ActivityOutcome? outcome,
+  });
 }

@@ -1,4 +1,7 @@
 {
+  "buildCommand": "if cd flutter; then git pull; else git clone https://github.com/flutter/flutter.git --depth 1 -b stable; fi && flutter/bin/flutter doctor && flutter/bin/flutter config --enable-web && flutter/bin/flutter pub get && flutter/bin/flutter build web --release --base-href /",
+  "outputDirectory": "build/web",
+  "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]

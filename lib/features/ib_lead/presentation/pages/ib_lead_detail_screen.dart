@@ -4,7 +4,9 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/enums/ib_deal_type.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/models/ib_lead_model.dart';
+import '../../../../core/models/ib_progress_update.dart';
 import '../../../../core/models/ib_remark_entry.dart';
+import '../../../../core/models/key_contact_model.dart';
 import '../../../../core/models/notification_model.dart';
 import '../../../../core/repositories/ib_lead_repository.dart';
 import '../../../../core/services/mock_notification_queue.dart';
@@ -200,6 +202,17 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
     showCompassSnack(context,
         message: 'IB lead dropped — RM notified',
         type: CompassSnackType.warn);
+  }
+
+  /// Mock download handler — production wires this to the storage layer
+  /// (S3/GCS pre-signed URL or in-app file viewer). For the prototype the
+  /// snackbar confirms the action so the demo flow stays intact.
+  void _downloadDoc(IbFinancialDoc doc) {
+    showCompassSnack(
+      context,
+      message: 'Downloading ${doc.fileName} · ${doc.sizeLabel}',
+      type: CompassSnackType.success,
+    );
   }
 
   Future<void> _resubmit() async {
@@ -484,21 +497,24 @@ class _IbLeadDetailScreenState extends State<IbLeadDetailScreen> {
                   if (lead.clientName != null) _row('Client', lead.clientName!),
                   if (lead.clientCode != null) _row('Code', lead.clientCode!),
                   _row('Company', lead.companyName),
-                  if (lead.contacts.isNotEmpty)
-                    _row(
-                      'Contacts',
-                      lead.contacts.map((c) => '${c.name} (${c.designation})').join('\n'),
-                    ),
                 ],
                 if (lead.industry != null) _row('Industry', lead.industryDisplay),
                 if ((lead.websiteUrl ?? '').isNotEmpty)
                   _row('Website', lead.websiteUrl!),
-                if (lead.financialDocs.isNotEmpty)
-                  _row('Financial docs',
-                      '${lead.financialDocs.length} file${lead.financialDocs.length == 1 ? '' : 's'} attached'),
               ],
             ),
           ),
+          if (!maskIdentity && lead.contacts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ContactsCard(contacts: lead.contacts),
+          ],
+          if (lead.financialDocs.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _FinancialDocsCard(
+              docs: lead.financialDocs,
+              onDownload: _downloadDoc,
+            ),
+          ],
           const SizedBox(height: 12),
           CompassCard(
             child: Column(
@@ -955,6 +971,242 @@ class _ProgressCard extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Key contacts — structured rows with name + designation + mobile + email.
+// ──────────────────────────────────────────────────────────────────────
+
+class _ContactsCard extends StatelessWidget {
+  final List<KeyContactModel> contacts;
+  const _ContactsCard({required this.contacts});
+
+  @override
+  Widget build(BuildContext context) {
+    return CompassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CompassSectionHeader(
+            title: 'Key contacts',
+            count: contacts.length,
+          ),
+          const SizedBox(height: 10),
+          ...List.generate(contacts.length, (i) {
+            final c = contacts[i];
+            final isLast = i == contacts.length - 1;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color:
+                            AppColors.navyPrimary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _initials(c.name),
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.navyPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.name,
+                            style: AppTextStyles.bodyMedium
+                                .copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            c.designation,
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
+                          if ((c.mobile).isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.phone_outlined,
+                                    size: 13, color: AppColors.textHint),
+                                const SizedBox(width: 5),
+                                Text(c.mobile,
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
+                          if ((c.email).isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                const Icon(Icons.mail_outline,
+                                    size: 13, color: AppColors.textHint),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    c.email,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isLast)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child:
+                        Divider(height: 1, color: Colors.grey.shade200),
+                  ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Financial documents — full file list with per-row download icon.
+// In the prototype download fires a snackbar; production wires this to
+// the storage layer (e.g. pre-signed URL).
+// ──────────────────────────────────────────────────────────────────────
+
+class _FinancialDocsCard extends StatelessWidget {
+  final List<IbFinancialDoc> docs;
+  final void Function(IbFinancialDoc) onDownload;
+  const _FinancialDocsCard({required this.docs, required this.onDownload});
+
+  IconData _iconFor(String mime, String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    if (mime == 'application/pdf' || ext == 'pdf') {
+      return Icons.picture_as_pdf_outlined;
+    }
+    if (mime.contains('spreadsheet') || ext == 'xlsx' || ext == 'xls' ||
+        ext == 'csv') {
+      return Icons.table_chart_outlined;
+    }
+    if (mime.contains('word') || ext == 'docx' || ext == 'doc') {
+      return Icons.description_outlined;
+    }
+    if (mime.startsWith('image/') ||
+        ['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
+      return Icons.image_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CompassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CompassSectionHeader(
+            title: 'Company financials',
+            count: docs.length,
+          ),
+          const SizedBox(height: 10),
+          ...List.generate(docs.length, (i) {
+            final d = docs[i];
+            final isLast = i == docs.length - 1;
+            return Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfacePrimary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.borderDefault),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color:
+                            AppColors.navyPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        _iconFor(d.mimeType, d.fileName),
+                        size: 18,
+                        color: AppColors.navyPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            d.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            '${d.sizeLabel} · uploaded ${d.uploadedAt.day}/${d.uploadedAt.month}',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textHint,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Download',
+                      onPressed: () => onDownload(d),
+                      icon: const Icon(Icons.download_rounded,
+                          size: 20, color: AppColors.navyPrimary),
+                      splashRadius: 18,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );

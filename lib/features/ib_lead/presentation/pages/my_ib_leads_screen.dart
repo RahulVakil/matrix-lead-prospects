@@ -25,7 +25,11 @@ import '../../../../routing/route_names.dart';
 ///   Admin/MIS — every IB lead, with Pending review prioritised at top
 ///   IB user  — only Approved IB leads (their work bucket)
 class MyIbLeadsScreen extends StatefulWidget {
-  const MyIbLeadsScreen({super.key});
+  /// Optional initial status filter — used when navigated from a contextual
+  /// home task (e.g. the home Tasks rollup tap "IB leads sent back" lands
+  /// here with `initialStatus = IbLeadStatus.sentBack`).
+  final IbLeadStatus? initialStatus;
+  const MyIbLeadsScreen({super.key, this.initialStatus});
 
   @override
   State<MyIbLeadsScreen> createState() => _MyIbLeadsScreenState();
@@ -49,6 +53,7 @@ class _MyIbLeadsScreenState extends State<MyIbLeadsScreen> {
   @override
   void initState() {
     super.initState();
+    _statusFilter = widget.initialStatus;
     _load();
   }
 

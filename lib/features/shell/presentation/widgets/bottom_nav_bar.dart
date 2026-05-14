@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:stylish_bottom_bar/stylish_bottom_bar.dart';
 import '../../../../core/theme/app_colors.dart';
 
-/// 4 tabs matching compass_v2_mobile: Home | Clients | Analytics | More
+/// 4 tabs: Home | Clients | Analytics | More.
+/// Matches compass_v2_mobile bottom-nav exactly.
+/// Leads is reached from More → "Leads" tile (or from the home Leads card).
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;

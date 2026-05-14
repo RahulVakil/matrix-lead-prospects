@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/di/injection.dart';
 import '../../../../core/enums/activity_type.dart';
 import '../../../../core/enums/next_action_type.dart';
-import '../../../../core/models/next_action_model.dart';
-import '../../../../core/repositories/lead_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/compass_bottom_sheet.dart';
@@ -14,7 +11,15 @@ import '../../../../core/widgets/compass_date_field.dart';
 import '../../../../core/widgets/compass_text_field.dart';
 
 /// Bottom sheet to log a tactical activity (call/meeting/note/whatsapp).
-/// Includes a NEW "Next action" chip row that wires through `setNextAction`.
+/// The activity type is set by the caller (each outer CTA preselects its
+/// own type) — there is intentionally no type-switcher here so the user
+/// has a single, focused logging surface.
+///
+/// Captures notes, outcome, optional duration, and a follow-up next-action
+/// chip + date. The caller is responsible for persisting the activity AND
+/// the next action, so it can chain (e.g. open MeetingCreateSheet when the
+/// follow-up is a meeting).
+///
 /// After a Meeting log, prompts the RM whether an IB opportunity came up.
 class ActivityQuickLogSheet extends StatefulWidget {
   final String leadId;
@@ -26,6 +31,8 @@ class ActivityQuickLogSheet extends StatefulWidget {
     String? notes,
     ActivityOutcome? outcome,
     int? durationMinutes,
+    NextActionType? nextActionType,
+    DateTime? nextActionDate,
   ) onSave;
 
   const ActivityQuickLogSheet({
@@ -48,11 +55,14 @@ class ActivityQuickLogSheet extends StatefulWidget {
       String? notes,
       ActivityOutcome? outcome,
       int? durationMinutes,
+      NextActionType? nextActionType,
+      DateTime? nextActionDate,
     ) onSave,
   }) {
+    final t = preselectedType ?? ActivityType.call;
     return showCompassSheet(
       context,
-      title: 'Log activity',
+      title: 'Log ${t.label.toLowerCase()}',
       child: ActivityQuickLogSheet(
         leadId: leadId,
         leadName: leadName,
@@ -73,6 +83,15 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
   final _notesController = TextEditingController();
   final _durationController = TextEditingController();
 
+  // Meeting-only fields. The RM picks mode (Online video call vs
+  // In-person) and optionally a link/location. We capture this for
+  // every meeting log — both walk-ins and "log against scheduled"
+  // — so the timeline reflects how the meeting actually happened,
+  // independent of what was scheduled.
+  bool _meetingIsOnline = true;
+  final _meetingLinkController = TextEditingController();
+  final _meetingLocationController = TextEditingController();
+
   NextActionType? _nextActionType;
   DateTime? _nextActionDate;
 
@@ -88,27 +107,38 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
   void dispose() {
     _notesController.dispose();
     _durationController.dispose();
+    _meetingLinkController.dispose();
+    _meetingLocationController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
 
-    final notes = _notesController.text.trim().isEmpty ? null : _notesController.text.trim();
+    final rawNotes = _notesController.text.trim();
     final duration = int.tryParse(_durationController.text);
 
-    widget.onSave(_type, notes, _outcome, duration);
-
-    // Persist next action if set
-    if (_nextActionType != null && _nextActionType != NextActionType.none) {
-      await getIt<LeadRepository>().setNextAction(
-        widget.leadId,
-        NextActionModel(
-          type: _nextActionType!,
-          dueAt: _nextActionDate,
-        ),
-      );
+    // For meeting logs we prepend a one-line context (mode + link or
+    // location) to the notes so the timeline shows how the meeting
+    // actually happened. Walk-in / scheduled-log paths both flow
+    // through here so this stays consistent.
+    String? finalNotes;
+    if (_type == ActivityType.meeting) {
+      final modeLine = _meetingIsOnline
+          ? (_meetingLinkController.text.trim().isEmpty
+              ? 'Video call'
+              : 'Video call · ${_meetingLinkController.text.trim()}')
+          : (_meetingLocationController.text.trim().isEmpty
+              ? 'In-person'
+              : 'In-person · ${_meetingLocationController.text.trim()}');
+      finalNotes = rawNotes.isEmpty ? modeLine : '$modeLine\n$rawNotes';
+    } else {
+      finalNotes = rawNotes.isEmpty ? null : rawNotes;
     }
+
+    // Caller persists the activity AND the next action (so it can chain
+    // a follow-up meeting create sheet when next-action is "meeting").
+    widget.onSave(_type, finalNotes, _outcome, duration, _nextActionType, _nextActionDate);
 
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -118,6 +148,66 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
       // ignore: use_build_context_synchronously
       _promptIbOpportunity(context);
     }
+  }
+
+  Widget _modeCard({
+    required bool isOnline,
+    required IconData icon,
+    required String label,
+    required String subtitle,
+  }) {
+    final selected = _meetingIsOnline == isOnline;
+    return InkWell(
+      onTap: () => setState(() => _meetingIsOnline = isOnline),
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.navyPrimary.withValues(alpha: 0.10)
+              : AppColors.surfaceTertiary,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppColors.navyPrimary : AppColors.borderDefault,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: selected ? AppColors.navyPrimary : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: selected
+                          ? AppColors.navyPrimary
+                          : AppColors.textPrimary,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _promptIbOpportunity(BuildContext context) async {
@@ -166,24 +256,32 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.leadName, style: AppTextStyles.bodySmall),
-        const SizedBox(height: 16),
-
-        // Type cards
         Row(
           children: [
-            for (final t in [
-              ActivityType.call,
-              ActivityType.meeting,
-              ActivityType.note,
-              ActivityType.whatsApp,
-            ])
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _typeCard(t),
-                ),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.navyPrimary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Icon(_type.icon, size: 18, color: AppColors.navyPrimary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.leadName, style: AppTextStyles.bodySmall),
+                  Text(
+                    _type.description,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -222,6 +320,51 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
           const SizedBox(height: 16),
         ],
 
+        // Meeting-only: how was it conducted?
+        if (_type == ActivityType.meeting) ...[
+          Text('How was it conducted?', style: AppTextStyles.labelSmall),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _modeCard(
+                  isOnline: false,
+                  icon: Icons.location_on_outlined,
+                  label: 'In-person',
+                  subtitle: 'Branch / client office',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _modeCard(
+                  isOnline: true,
+                  icon: Icons.videocam_outlined,
+                  label: 'Video call',
+                  subtitle: 'Teams / Zoom / Meet',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_meetingIsOnline)
+            CompassTextField(
+              controller: _meetingLinkController,
+              label: 'Meeting link',
+              hint: 'Optional — paste link if you have it',
+              prefixIcon: Icons.link,
+              maxLength: 500,
+            )
+          else
+            CompassTextField(
+              controller: _meetingLocationController,
+              label: 'Location',
+              hint: 'Optional — e.g. JM Financial, BKC office',
+              prefixIcon: Icons.location_on_outlined,
+              maxLength: 200,
+            ),
+          const SizedBox(height: 16),
+        ],
+
         CompassTextField(
           controller: _notesController,
           label: 'Notes',
@@ -231,7 +374,10 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
         ),
         const SizedBox(height: 16),
 
-        Text('Next action', style: AppTextStyles.labelSmall),
+        Text('Set a follow-up (optional)',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.textSecondary,
+            )),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -269,42 +415,4 @@ class _ActivityQuickLogSheetState extends State<ActivityQuickLogSheet> {
     );
   }
 
-  Widget _typeCard(ActivityType t) {
-    final selected = _type == t;
-    return InkWell(
-      onTap: () => setState(() => _type = t),
-      borderRadius: BorderRadius.circular(10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.navyPrimary.withValues(alpha: 0.10)
-              : AppColors.surfaceTertiary,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? AppColors.navyPrimary : AppColors.borderDefault,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              t.icon,
-              size: 22,
-              color: selected ? AppColors.navyPrimary : AppColors.textSecondary,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              t.label,
-              style: AppTextStyles.caption.copyWith(
-                color: selected ? AppColors.navyPrimary : AppColors.textSecondary,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
